@@ -19,6 +19,7 @@ Open [index.html](C:\Dev\Image generator\index.html) in a browser.
 
 ## QA and continuity
 
+- Git workflow: [GIT_WORKFLOW.md](C:\Dev\Image generator\GIT_WORKFLOW.md)
 - Session history: [SESSION_HISTORY.md](C:\Dev\Image generator\SESSION_HISTORY.md)
 - Audit spec: [AUDIT_INSTRUCTION_SHEET.md](C:\Dev\Image generator\AUDIT_INSTRUCTION_SHEET.md)
 - Live test plan: [LIVE_TEST_MATRIX.md](C:\Dev\Image generator\LIVE_TEST_MATRIX.md)

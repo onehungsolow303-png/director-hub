@@ -9,6 +9,7 @@ Core files:
 - [styles.css](C:\Dev\Image generator\styles.css)
 
 Supporting docs:
+- [GIT_WORKFLOW.md](C:\Dev\Image generator\GIT_WORKFLOW.md)
 - [SESSION_HISTORY.md](C:\Dev\Image generator\SESSION_HISTORY.md)
 - [AUDIT_INSTRUCTION_SHEET.md](C:\Dev\Image generator\AUDIT_INSTRUCTION_SHEET.md)
 - [LIVE_TEST_MATRIX.md](C:\Dev\Image generator\LIVE_TEST_MATRIX.md)
