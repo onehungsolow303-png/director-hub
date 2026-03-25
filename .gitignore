@@ -1,0 +1,11 @@
+.venv/
+custom_nodes/
+models/
+temp/
+user/
+output/
+input/
+app.test.tmp
+*.log
+*.tmp
+*.bak

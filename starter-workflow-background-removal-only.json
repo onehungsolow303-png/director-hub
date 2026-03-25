@@ -1,0 +1,28 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "replace-with-your-source-image.png"
+    }
+  },
+  "2": {
+    "class_type": "TransparencyBackgroundRemover",
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "edge_mode": "PIXEL_ART"
+    }
+  },
+  "3": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "bg_removed_asset",
+      "images": [
+        "2",
+        0
+      ]
+    }
+  }
+}

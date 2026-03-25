@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ComfyUI Asset Editor Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero">
+      <p class="eyebrow">Node-Based ComfyUI Builder</p>
+      <h1>Build clean game assets without guessing what node goes where.</h1>
+      <p class="hero-copy">
+        Answer a few blunt, practical questions. The app gives you the exact nodes to install,
+        model-ready prompts, and a workflow JSON template for background removal, game UI generation,
+        or both together.
+      </p>
+      <div class="hero-actions">
+        <button id="loadDemoButton" class="primary-button" type="button">Load a Safe Starter Setup</button>
+        <button id="copyChecklistButton" class="ghost-button" type="button">Copy Install Checklist</button>
+      </div>
+    </section>
+
+    <section class="panel-grid">
+      <form id="workflowForm" class="panel form-panel">
+        <div class="panel-heading">
+          <h2>1. What are we building?</h2>
+          <p>Pick the pipeline first. The app fills in sane defaults.</p>
+        </div>
+
+        <label class="field">
+          <span>Workflow type</span>
+          <select name="workflowType">
+            <option value="combined">Generate UI and remove the background</option>
+            <option value="background">Only remove the background from existing images</option>
+            <option value="ui">Only generate UI elements</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>What kind of game UI do you want?</span>
+          <select name="style">
+            <option value="fantasy">Fantasy RPG</option>
+            <option value="scifi">Sci-Fi / Cyberpunk</option>
+            <option value="pixel">Pixel Art</option>
+            <option value="clean">Clean Mobile / Casual</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Which image model are you using?</span>
+          <select name="checkpoint">
+            <option value="juggernautXL">Juggernaut XL</option>
+            <option value="flux">Flux</option>
+            <option value="sdxl">Generic SDXL checkpoint</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Which background remover do you want?</span>
+          <select name="remover">
+            <option value="essentials">ComfyUI Essentials / TransparencyBackgroundRemover</option>
+            <option value="bria">ComfyUI-BRIA_AI-RMBG</option>
+            <option value="was">WAS Node Suite / Image Rembg</option>
+            <option value="ben2">BEN2</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>What are you making?</span>
+          <input name="assetType" type="text" value="ornate inventory button" placeholder="Example: mana orb icon">
+        </label>
+
+        <label class="field">
+          <span>Extra material or theme details</span>
+          <input name="material" type="text" value="ornate gold border, carved stone backing, glowing rune core" placeholder="Example: glass, neon, brushed metal">
+        </label>
+
+        <label class="field checkbox-field">
+          <input name="batchMode" type="checkbox">
+          <span>I want batch processing for a folder of source images</span>
+        </label>
+
+        <label class="field checkbox-field">
+          <input name="pixelEdges" type="checkbox">
+          <span>I need crisp edges for sprites or pixel-style UI</span>
+        </label>
+
+        <button class="primary-button full-width" type="submit">Build My Workflow</button>
+      </form>
+
+      <section class="panel output-panel">
+        <div class="panel-heading">
+          <h2>2. Use this setup</h2>
+          <p>Everything updates as soon as you build the workflow.</p>
+        </div>
+
+        <div class="output-block">
+          <h3>Exact nodes to install</h3>
+          <ul id="installList" class="checklist"></ul>
+        </div>
+
+        <div class="output-block">
+          <h3>Plain-English setup steps</h3>
+          <ol id="stepsList" class="steps"></ol>
+        </div>
+
+        <div class="output-block">
+          <h3>Model-specific positive prompt</h3>
+          <pre id="positivePrompt" class="code-block"></pre>
+        </div>
+
+        <div class="output-block">
+          <h3>Negative prompt</h3>
+          <pre id="negativePrompt" class="code-block"></pre>
+        </div>
+
+        <div class="output-block">
+          <h3>ComfyUI API workflow JSON template</h3>
+          <pre id="workflowJson" class="code-block large"></pre>
+        </div>
+
+        <div class="button-row">
+          <button id="copyJsonButton" class="ghost-button" type="button">Copy JSON</button>
+          <button id="downloadJsonButton" class="primary-button" type="button">Download JSON</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel cutter-panel">
+      <div class="panel-heading panel-heading-wide">
+        <div>
+          <p class="eyebrow">Local Cleanup App</p>
+          <h2>3. Remove dark or light backgrounds without ComfyUI.</h2>
+          <p>Upload a UI sheet, choose whether you want true background removal or a tight object extract, preview it instantly, and export the result or the largest split panels.</p>
+        </div>
+      </div>
+
+      <div class="cutter-grid">
+        <section class="cutter-controls">
+          <label class="field">
+            <span>Source image</span>
+            <input id="bgInputFile" type="file" accept="image/png,image/jpeg,image/webp">
+          </label>
+
+          <label class="field">
+            <span>Extraction mode</span>
+            <select id="bgMode">
+              <option value="remove">Background removal</option>
+              <option value="crop">Tight object crop for dark mats</option>
+              <option value="multi">Multi-point background erase</option>
+              <option value="ai">AI auto mask (preview)</option>
+            </select>
+          </label>
+
+          <div class="ai-settings-block">
+            <p class="tool-group-label">AI Mask Assist</p>
+
+            <label class="field">
+              <span>Future AI model family</span>
+              <select id="bgAiSource">
+                <option value="bria">BRIA-style foreground mask</option>
+                <option value="isnet">IS-Net style detail mask</option>
+                <option value="hybrid">Hybrid UI + object mask</option>
+              </select>
+            </label>
+
+            <label class="field range-field">
+              <span>Mask Confidence <strong id="aiConfidenceValue">72</strong></span>
+              <input id="bgAiConfidence" type="range" min="1" max="100" value="72">
+            </label>
+
+            <label class="field range-field">
+              <span>Matte Refinement <strong id="aiMatteValue">68</strong></span>
+              <input id="bgAiMatte" type="range" min="0" max="100" value="68">
+            </label>
+
+            <label class="field range-field">
+              <span>Spill Suppression <strong id="aiSpillValue">62</strong></span>
+              <input id="bgAiSpill" type="range" min="0" max="100" value="62">
+            </label>
+
+            <label class="field checkbox-field">
+              <input id="bgAiRelight" type="checkbox">
+              <span>Prepare relight pass for new scene composites</span>
+            </label>
+
+            <label class="field checkbox-field">
+              <input id="bgAiInpaint" type="checkbox">
+              <span>Prepare scene-fill inpaint after subject removal</span>
+            </label>
+
+            <label class="field checkbox-field">
+              <input id="bgAiInvertMask" type="checkbox">
+              <span>Invert imported AI mask</span>
+            </label>
+
+            <label class="field range-field">
+              <span>Mask Expand / Contract <strong id="aiMaskExpandValue">0</strong></span>
+              <input id="bgAiMaskExpand" type="range" min="-12" max="12" value="0">
+            </label>
+
+            <label class="field range-field">
+              <span>Mask Feather <strong id="aiMaskFeatherValue">0</strong></span>
+              <input id="bgAiMaskFeather" type="range" min="0" max="12" value="0">
+            </label>
+
+            <label class="field checkbox-field">
+              <input id="bgAiCombineManual" type="checkbox" checked>
+              <span>Combine imported AI mask with manual keep/remove corrections</span>
+            </label>
+
+            <p class="helper-copy ai-helper-copy">AI mode is scaffolding for a future local model hook. Today it stores mask preferences and keeps manual refine tools available after the mask stage.</p>
+          </div>
+
+          <label class="field">
+            <span>Preset</span>
+            <select id="bgPreset">
+              <option value="ui-balanced">UI Balanced</option>
+              <option value="ui-soft">UI Soft</option>
+              <option value="ui-hard">UI Hard</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Background tone</span>
+            <select id="bgTone">
+              <option value="dark">Dark background</option>
+              <option value="light">Light background</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Output format</span>
+            <select id="bgLayout">
+              <option value="sheet">Keep original layout (same size)</option>
+              <option value="split">Preview separated assets</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Current mask input</span>
+            <select id="bgMaskSource">
+              <option value="processed">Processed mask</option>
+              <option value="manual">Manual corrections mask</option>
+              <option value="ai">Imported AI mask</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Preview target</span>
+            <select id="bgPreviewTarget">
+              <option value="result">Show extracted result</option>
+              <option value="mask">Show mask preview</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Separated asset export size</span>
+            <select id="bgPanelLayout">
+              <option value="crop">Tight crop each asset</option>
+              <option value="full">Keep original canvas size and position</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Editor workspace</span>
+            <select id="bgEditorView">
+              <option value="balanced">Balanced preview</option>
+              <option value="focus">Large original editor</option>
+            </select>
+          </label>
+
+          <label class="field range-field">
+            <span>Brush Size <strong id="brushSizeValue">22</strong></span>
+            <input id="bgBrushSize" type="range" min="4" max="80" value="22">
+          </label>
+
+          <label class="field range-field">
+            <span>Mask Overlay <strong id="maskOverlayValue">55</strong>%</span>
+            <input id="bgMaskOverlay" type="range" min="0" max="100" value="55">
+          </label>
+
+          <label class="field range-field">
+            <span>Threshold <strong id="thresholdValue">18</strong></span>
+            <input id="bgThreshold" type="range" min="0" max="80" value="18">
+          </label>
+
+          <label class="field range-field">
+            <span>Softness <strong id="softnessValue">24</strong></span>
+            <input id="bgSoftness" type="range" min="1" max="80" value="24">
+          </label>
+
+          <label class="field range-field">
+            <span>Alpha Floor <strong id="alphaFloorValue">8</strong></span>
+            <input id="bgAlphaFloor" type="range" min="0" max="64" value="8">
+          </label>
+
+          <label class="field range-field">
+            <span>Alpha Ceiling <strong id="alphaCeilingValue">245</strong></span>
+            <input id="bgAlphaCeiling" type="range" min="192" max="255" value="245">
+          </label>
+
+          <label class="field range-field">
+            <span>Split Alpha Cutoff <strong id="componentAlphaValue">220</strong></span>
+            <input id="bgComponentAlpha" type="range" min="64" max="255" value="220">
+          </label>
+
+          <label class="field range-field">
+            <span>Minimum Split Size <strong id="componentPixelsValue">5000</strong></span>
+            <input id="bgComponentPixels" type="range" min="500" max="50000" step="500" value="5000">
+          </label>
+
+          <label class="field range-field">
+            <span>Component Padding <strong id="componentPadValue">2</strong></span>
+            <input id="bgComponentPad" type="range" min="0" max="32" value="2">
+          </label>
+
+          <label class="field range-field">
+            <span>Object Padding <strong id="objectPadValue">12</strong></span>
+            <input id="bgObjectPad" type="range" min="0" max="80" value="12">
+          </label>
+
+          <label class="field checkbox-field">
+            <input id="bgCropTransparent" type="checkbox">
+            <span>Crop transparent borders on the main export</span>
+          </label>
+
+          <label class="field checkbox-field">
+            <input id="bgDecontaminate" type="checkbox" checked>
+            <span>Clean background halos on semi-transparent edges</span>
+          </label>
+
+          <label class="field range-field">
+            <span>Edge Cleanup Strength <strong id="edgeCleanupValue">55</strong></span>
+            <input id="bgEdgeCleanupStrength" type="range" min="0" max="100" value="55">
+          </label>
+
+          <label class="field checkbox-field">
+            <input id="bgStrongBorderRepair" type="checkbox">
+            <span>Repair border edges (strong)</span>
+          </label>
+
+          <label class="field checkbox-field">
+            <input id="bgPreserveColor" type="checkbox" checked>
+            <span>Preserve original asset colors in the main preview/export</span>
+          </label>
+
+          <label class="field checkbox-field">
+            <input id="bgSecondPass" type="checkbox">
+            <span>Use second-pass edge refinement</span>
+          </label>
+
+          <div class="button-row">
+            <button id="processBgButton" class="primary-button" type="button">Process Image</button>
+            <button id="cancelBgButton" class="ghost-button" type="button">Cancel</button>
+            <button id="downloadBgButton" class="ghost-button" type="button">Download Preview PNG</button>
+            <button id="downloadLayoutButton" class="ghost-button" type="button">Download Full Sheet PNG</button>
+            <button id="downloadMaskButton" class="ghost-button" type="button">Download Mask PNG</button>
+          </div>
+          <div class="button-row">
+            <label class="ghost-button file-button" for="aiMaskInput">Load AI Mask PNG</label>
+            <input id="aiMaskInput" type="file" accept="image/png,image/webp,image/jpeg" hidden>
+          </div>
+          <p class="helper-copy">Use "Load AI Mask PNG" plus "Current mask input = Imported AI mask" to drive extraction from an external matte. "Future AI model family" only stages which local model style we plan to connect later.</p>
+          <p class="tool-group-label">Sampling & Protection</p>
+          <div class="button-row">
+            <button id="sampleBgButton" class="ghost-button" type="button">Sample Background Point(s)</button>
+            <button id="sampleKeepButton" class="ghost-button" type="button">Mark UI Keep Point(s)</button>
+            <button id="sampleKeepBoxButton" class="ghost-button" type="button">Draw UI Keep Box(es)</button>
+            <button id="sampleSubtractBoxButton" class="ghost-button" type="button">Draw Scenery Remove Box(es)</button>
+            <button id="eraseKeepBoxButton" class="ghost-button" type="button">Erase Bad Keep Box(es)</button>
+            <button id="autoDetectUiButton" class="ghost-button" type="button">Auto-Detect UI Box(es)</button>
+            <button id="clearKeepBoxesButton" class="ghost-button" type="button">Clear UI Keep Box(es)</button>
+            <button id="clearSubtractBoxesButton" class="ghost-button" type="button">Clear Scenery Remove Box(es)</button>
+            <button id="clearBrushKeepButton" class="ghost-button" type="button">Clear Brush Keep Marks</button>
+            <button id="clearBrushRemoveButton" class="ghost-button" type="button">Clear Brush Remove Marks</button>
+          </div>
+          <p id="bgSampleMeta" class="sampling-copy">Background samples: 0</p>
+          <p id="keepSampleMeta" class="sampling-copy">UI keep points: 0</p>
+          <p id="keepBoxMeta" class="sampling-copy">UI keep boxes: 0</p>
+          <p id="subtractBoxMeta" class="sampling-copy">Scenery remove boxes: 0</p>
+          <p id="brushKeepMeta" class="sampling-copy">Brush keep marks: 0</p>
+          <p id="brushRemoveMeta" class="sampling-copy">Brush remove marks: 0</p>
+          <p class="helper-copy">Use keep boxes for whole bars or panels, brush keep for ornate edges, brush remove for stray junk, and scenery remove boxes for larger unwanted regions.</p>
+
+          <div class="button-row">
+            <button id="downloadPanelsButton" class="ghost-button" type="button">Download Split Panels</button>
+            <button id="undoBrushEditButton" class="ghost-button" type="button">Undo Last Brush Edit</button>
+          </div>
+          <p class="tool-group-label">Quick Protect</p>
+          <div class="button-row">
+            <button id="protectTopBarButton" class="ghost-button" type="button">Protect Top Bar</button>
+            <button id="protectBottomBarButton" class="ghost-button" type="button">Protect Bottom Bar</button>
+            <button id="protectIconStripButton" class="ghost-button" type="button">Protect Icon Strip</button>
+            <button id="brushKeepButton" class="ghost-button" type="button">Brush Keep Edges</button>
+            <button id="brushRemoveButton" class="ghost-button" type="button">Brush Remove Junk</button>
+          </div>
+
+          <p id="bgStatus" class="status-copy">Upload an image to start.</p>
+          <div id="maskStatusBlock" class="status-copy mask-status-block">
+            <strong>Mask pipeline</strong><br>
+            Source: Heuristic processed mask<br>
+            Matte refinement: Heuristic edge cleanup<br>
+            AI hook: Not connected yet
+          </div>
+        </section>
+
+        <section class="cutter-preview-area">
+          <div id="previewStack" class="preview-stack">
+            <div class="preview-card">
+              <div class="preview-head">
+                <h3>Original</h3>
+                <p id="originalMeta">No image loaded</p>
+              </div>
+              <div class="preview-canvas-wrap checkerboard">
+                <canvas id="originalCanvas"></canvas>
+              </div>
+            </div>
+
+            <div class="preview-card">
+              <div class="preview-head">
+                <h3>Result Preview</h3>
+                <p id="resultMeta">No result yet</p>
+              </div>
+              <div id="resultPreviewWrap" class="preview-canvas-wrap checkerboard">
+                <canvas id="resultCanvas"></canvas>
+                <div id="resultBusy" class="result-busy" aria-hidden="true">Processing image...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="output-block split-panel-block">
+            <div class="split-panel-header">
+              <h3>Split Panels</h3>
+              <div class="split-filter-toggle" role="group" aria-label="Split panel filter">
+                <button id="showLikelyUiButton" class="ghost-button split-filter-button split-filter-button-active" type="button">Show likely UI only</button>
+                <button id="showAllPanelsButton" class="ghost-button split-filter-button" type="button">Show all panels</button>
+              </div>
+            </div>
+            <label class="field range-field split-filter-range">
+              <span>Hide tiny fragments under <strong id="splitMinPixelsValue">0</strong> px</span>
+              <input id="splitMinPixels" type="range" min="0" max="250000" step="500" value="0">
+            </label>
+            <label class="field split-sort-field">
+              <span>Sort split panels</span>
+              <select id="splitSortMode">
+                <option value="useful">Sort by usefulness</option>
+                <option value="area">Sort by size</option>
+                <option value="source">Sort by source type</option>
+              </select>
+            </label>
+            <div id="splitLinks" class="split-links empty-state">No split panels exported yet.</div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

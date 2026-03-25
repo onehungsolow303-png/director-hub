@@ -1,0 +1,56 @@
+DO THIS EXACTLY
+
+1. Open ComfyUI.
+2. Open ComfyUI Manager.
+3. Install:
+   - ComfyUI Essentials
+4. Restart ComfyUI.
+
+WHAT THIS ONE DOES
+
+- It does NOT generate a new image.
+- It takes an image you already have.
+- It removes the background.
+- It saves a transparent PNG.
+
+USE THIS FILE
+
+C:\Dev\Image generator\starter-workflow-background-removal-only.json
+
+ADD THESE NODES IN COMFYUI
+
+1. LoadImage
+2. TransparencyBackgroundRemover
+3. SaveImage
+
+HOW TO WIRE THEM
+
+1. LoadImage:
+   - choose the image you want to cut out
+
+2. TransparencyBackgroundRemover:
+   - LoadImage image -> TransparencyBackgroundRemover image
+   - if your version has edge mode:
+     set it to PIXEL_ART for pixel art
+     set it to STANDARD for normal art
+
+3. SaveImage:
+   - TransparencyBackgroundRemover output -> SaveImage images
+   - filename prefix = bg_removed_asset
+
+FINAL STEP
+
+1. Click Queue Prompt.
+2. Wait for it to finish.
+3. Open your ComfyUI output folder.
+4. Your result should be a PNG with transparency.
+
+IF IT DOES NOT WORK
+
+If the remover node is missing:
+- install ComfyUI Essentials
+- restart ComfyUI
+
+If edges look weird:
+- try PIXEL_ART for sprites and UI
+- try STANDARD for normal images
