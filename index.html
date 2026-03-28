@@ -5,9 +5,333 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ComfyUI Asset Editor Builder</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
 </head>
 <body>
   <main class="app-shell">
+    <nav class="sidebar">
+      <div class="sidebar-brand">Asset Editor</div>
+      <div class="sidebar-group">Tools</div>
+      <a class="sidebar-link active" data-tab="extraction">Extraction</a>
+      <a class="sidebar-link" data-tab="workflow">Workflow Builder</a>
+    </nav>
+
+    <header class="topbar">
+      <h1>Game UI Asset Extraction</h1>
+      <span class="topbar-status" id="topbarStatus"></span>
+    </header>
+
+    <div class="main-content">
+
+    <!-- ══ TAB: Extraction ══ -->
+    <div class="tab-page active" id="tab-extraction">
+
+    <div class="cutter-grid">
+      <section class="cutter-controls">
+
+        <!-- AI Remove (primary workflow) -->
+        <div class="card">
+          <div class="card-header" onclick="this.parentElement.classList.toggle('closed')">
+            <h3>AI Remove</h3><span class="card-toggle">&#9660;</span>
+          </div>
+          <div class="card-content">
+            <label class="checkbox-field">
+              <input id="batchModeToggle" type="checkbox">
+              <span>Batch mode</span>
+            </label>
+            <label class="field" id="singleFileField">
+              <span>Source image</span>
+              <input id="bgInputFile" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+            <label class="field" id="batchFileField" style="display:none">
+              <span>Select images for batch</span>
+              <input id="batchInputFiles" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+            </label>
+            <p id="batchFileCount" class="helper-copy" style="display:none">No files selected.</p>
+            <label class="field" id="batchAiSourceField" style="display:none">
+              <span>Batch processing mode</span>
+              <select id="batchAiSource">
+                <option value="direct">Direct background removal (no AI mask)</option>
+                <option value="comfyui">AI mask via ComfyUI + background removal (2-pass)</option>
+                <option value="browser">AI mask via Browser AI + background removal (2-pass, draft)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Background tone</span>
+              <select id="bgTone">
+                <option value="dark">Dark (multicolor)</option>
+                <option value="light">Light (white)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Segmentation Model</span>
+              <select id="comfyuiModel">
+                <option value="BiRefNet-general">BiRefNet General</option>
+                <option value="BiRefNet-HR">BiRefNet HR</option>
+                <option value="BiRefNet_512x512">BiRefNet 512 (fast)</option>
+                <option value="RMBG-2.0">RMBG 2.0</option>
+                <option value="INSPYRENET">InSPyReNet</option>
+                <option value="BEN2">BEN2</option>
+              </select>
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span id="comfyuiDot" style="width:8px;height:8px;border-radius:50%;background:#666;display:inline-block"></span>
+              <span id="comfyuiStatus" class="helper-copy" style="margin:0;font-size:12px">ComfyUI: checking...</span>
+            </div>
+            <div class="btn-row" style="margin-top:8px">
+              <button id="aiRemoveButton" class="primary-button" type="button" style="background:var(--accent);width:100%">AI Remove</button>
+            </div>
+            <p id="aiRemoveStatus" class="helper-copy" style="display:none;margin-top:6px"></p>
+            <p id="bgStatus" class="status-copy" style="margin-top:8px">Upload an image to start.</p>
+            <div id="maskStatusBlock" class="status-copy" style="margin-top:4px"></div>
+          </div>
+        </div>
+
+        <!-- Advanced Settings (collapsed by default) -->
+        <div class="card closed">
+          <div class="card-header" onclick="this.parentElement.classList.toggle('closed')">
+            <h3>Advanced Settings</h3><span class="card-toggle">&#9660;</span>
+          </div>
+          <div class="card-content">
+
+            <div class="tool-group-label">Mode &amp; Preset</div>
+            <label class="field">
+              <span>Extraction mode</span>
+              <select id="bgMode">
+                <option value="remove">Background removal</option>
+                <option value="crop">Tight object crop for dark mats</option>
+                <option value="multi">Multi-point background erase</option>
+                <option value="ai">AI auto mask (preview)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Preset</span>
+              <select id="bgPreset">
+                <optgroup label="Dark Background">
+                  <option value="dark-balanced" selected>Dark — Balanced</option>
+                  <option value="dark-soft">Dark — Soft</option>
+                  <option value="dark-hard">Dark — Hard</option>
+                </optgroup>
+                <optgroup label="Light Background">
+                  <option value="light-balanced">Light — Balanced</option>
+                  <option value="light-soft">Light — Soft</option>
+                  <option value="light-hard">Light — Hard</option>
+                </optgroup>
+              </select>
+            </label>
+
+            <div class="tool-group-label">ComfyUI &amp; AI Mask</div>
+            <label class="field">
+              <span>ComfyUI Server</span>
+              <input id="comfyuiServer" type="text" value="http://127.0.0.1:8000" placeholder="http://127.0.0.1:8000">
+            </label>
+            <div class="btn-row" style="margin-bottom:10px">
+              <button id="comfyuiConnectButton" class="ghost-button" type="button">Test Connection</button>
+              <button id="comfyuiGenerateMaskButton" class="primary-button" type="button">Generate AI Mask</button>
+              <button id="browserMaskButton" class="ghost-button" type="button">Quick Mask (Browser)</button>
+            </div>
+            <p id="browserMaskStatus" class="helper-copy">Browser AI: model not loaded</p>
+
+            <div class="tool-group-label">Mask Refinement</div>
+            <label class="field">
+              <span>AI model family</span>
+              <select id="bgAiSource">
+                <option value="bria">BRIA-style foreground mask</option>
+                <option value="isnet">IS-Net style detail mask</option>
+                <option value="hybrid">Hybrid UI + object mask</option>
+              </select>
+            </label>
+            <label class="field range-field">
+              <span>Mask Confidence <strong id="aiConfidenceValue">72</strong></span>
+              <input id="bgAiConfidence" type="range" min="1" max="100" value="72">
+            </label>
+            <label class="field range-field">
+              <span>Matte Refinement <strong id="aiMatteValue">68</strong></span>
+              <input id="bgAiMatte" type="range" min="0" max="100" value="68">
+            </label>
+            <label class="field range-field">
+              <span>Spill Suppression <strong id="aiSpillValue">62</strong></span>
+              <input id="bgAiSpill" type="range" min="0" max="100" value="62">
+            </label>
+            <label class="checkbox-field"><input id="bgAiRelight" type="checkbox"><span>Relight pass</span></label>
+            <label class="checkbox-field"><input id="bgAiInpaint" type="checkbox"><span>Inpaint fill</span></label>
+            <label class="checkbox-field"><input id="bgAiInvertMask" type="checkbox"><span>Invert imported mask</span></label>
+            <label class="field range-field">
+              <span>Expand / Contract <strong id="aiMaskExpandValue">0</strong></span>
+              <input id="bgAiMaskExpand" type="range" min="-12" max="12" value="0">
+            </label>
+            <label class="field range-field">
+              <span>Feather <strong id="aiMaskFeatherValue">0</strong></span>
+              <input id="bgAiMaskFeather" type="range" min="0" max="12" value="0">
+            </label>
+            <label class="checkbox-field"><input id="bgAiCombineManual" type="checkbox" checked><span>Combine with manual corrections</span></label>
+
+            <div class="tool-group-label">Threshold &amp; Edges</div>
+            <label class="field range-field"><span>Threshold <strong id="thresholdValue">18</strong></span><input id="bgThreshold" type="range" min="0" max="100" value="18"></label>
+            <label class="field range-field"><span>Softness <strong id="softnessValue">24</strong></span><input id="bgSoftness" type="range" min="0" max="100" value="24"></label>
+            <label class="field range-field"><span>Alpha Floor <strong id="alphaFloorValue">8</strong></span><input id="bgAlphaFloor" type="range" min="0" max="100" value="8"></label>
+            <label class="field range-field"><span>Alpha Ceiling <strong id="alphaCeilingValue">245</strong></span><input id="bgAlphaCeiling" type="range" min="100" max="255" value="245"></label>
+            <label class="field range-field"><span>Edge Cleanup <strong id="edgeCleanupValue">55</strong></span><input id="bgEdgeCleanupStrength" type="range" min="0" max="100" value="55"></label>
+            <label class="checkbox-field"><input id="bgCropTransparent" type="checkbox"><span>Crop transparent borders</span></label>
+            <label class="checkbox-field"><input id="bgDecontaminate" type="checkbox" checked><span>Clean background halos</span></label>
+            <label class="checkbox-field"><input id="bgStrongBorderRepair" type="checkbox" checked><span>Repair border edges (strong)</span></label>
+            <label class="checkbox-field"><input id="bgPreserveColor" type="checkbox" checked><span>Preserve original colors</span></label>
+            <label class="checkbox-field"><input id="bgSecondPass" type="checkbox"><span>Second-pass edge refinement</span></label>
+
+            <div class="tool-group-label">Output &amp; View</div>
+            <label class="field"><span>Output format</span><select id="bgLayout"><option value="sheet">Keep original layout (same size)</option><option value="split">Split into panels</option></select></label>
+            <label class="field"><span>Current mask input</span><select id="bgMaskSource"><option value="processed">Processed mask</option><option value="manual">Manual corrections mask</option><option value="ai">Imported AI mask</option></select></label>
+            <label class="field"><span>Preview target</span><select id="bgPreviewTarget"><option value="result">Show extracted result</option><option value="mask">Show mask preview</option></select></label>
+            <label class="field"><span>Panel export size</span><select id="bgPanelLayout"><option value="crop">Tight crop each asset</option><option value="full">Keep original canvas size and position</option></select></label>
+            <label class="field"><span>Editor workspace</span><select id="bgEditorView"><option value="balanced">Balanced preview</option><option value="focus">Focus on original</option></select></label>
+            <label class="field range-field"><span>Brush Size <strong id="brushSizeValue">22</strong></span><input id="bgBrushSize" type="range" min="2" max="120" value="22"></label>
+            <label class="field range-field"><span>Mask Overlay <strong id="maskOverlayValue">55</strong></span><input id="bgMaskOverlay" type="range" min="0" max="100" value="55"></label>
+
+            <div class="tool-group-label">Split Settings</div>
+            <label class="field range-field"><span>Split Alpha Cutoff <strong id="componentAlphaValue">220</strong></span><input id="bgComponentAlpha" type="range" min="100" max="255" value="220"></label>
+            <label class="field range-field"><span>Minimum Split Size <strong id="componentPixelsValue">5000</strong></span><input id="bgComponentPixels" type="range" min="200" max="80000" value="5000" step="200"></label>
+            <label class="field range-field"><span>Component Padding <strong id="componentPadValue">2</strong></span><input id="bgComponentPad" type="range" min="0" max="24" value="2"></label>
+            <label class="field range-field"><span>Object Padding <strong id="objectPadValue">12</strong></span><input id="bgObjectPad" type="range" min="0" max="60" value="12"></label>
+
+            <div class="tool-group-label">Actions</div>
+            <div class="btn-row" style="margin-bottom:10px">
+              <button id="processBgButton" class="primary-button" type="button">Process Image</button>
+              <button id="cancelBgButton" class="ghost-button" type="button">Cancel</button>
+            </div>
+            <div id="batchProgressBlock" style="display:none;margin-bottom:10px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <span id="batchProgressLabel" class="helper-copy" style="margin:0">Batch: 0 / 0</span>
+                <span id="batchCurrentFile" class="helper-copy" style="margin:0;color:var(--accent)"></span>
+              </div>
+              <div style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+                <div id="batchProgressBar" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s"></div>
+              </div>
+            </div>
+            <div class="btn-row" style="margin-bottom:10px">
+              <button id="downloadBgButton" class="ghost-button" type="button">Download Preview</button>
+              <button id="downloadLayoutButton" class="ghost-button" type="button">Download Sheet</button>
+              <button id="downloadMaskButton" class="ghost-button" type="button">Download Mask</button>
+            </div>
+            <div class="btn-row" style="margin-bottom:10px">
+              <label class="ghost-button file-button" for="aiMaskInput">Load AI Mask PNG</label>
+              <input id="aiMaskInput" type="file" accept="image/png,image/webp,image/jpeg" hidden>
+            </div>
+
+            <div class="tool-group-label">Sampling &amp; Protection</div>
+            <div class="btn-row" style="margin-bottom:8px">
+              <button id="sampleBgButton" class="ghost-button" type="button">Sample BG</button>
+              <button id="sampleKeepButton" class="ghost-button" type="button">Keep Point</button>
+              <button id="sampleKeepBoxButton" class="ghost-button" type="button">Keep Box</button>
+              <button id="sampleSubtractBoxButton" class="ghost-button" type="button">Remove Box</button>
+            </div>
+            <div class="btn-row" style="margin-bottom:8px">
+              <button id="eraseKeepBoxButton" class="ghost-button" type="button">Erase Keep Box</button>
+              <button id="autoDetectUiButton" class="ghost-button" type="button">Auto-Detect</button>
+              <button id="brushKeepButton" class="ghost-button" type="button">Brush Keep</button>
+              <button id="brushRemoveButton" class="ghost-button" type="button">Brush Remove</button>
+            </div>
+            <div class="btn-row" style="margin-bottom:8px">
+              <button id="protectTopBarButton" class="ghost-button" type="button">Protect Top</button>
+              <button id="protectBottomBarButton" class="ghost-button" type="button">Protect Bottom</button>
+              <button id="protectIconStripButton" class="ghost-button" type="button">Protect Icons</button>
+            </div>
+            <div class="btn-row" style="margin-bottom:8px">
+              <button id="clearKeepBoxesButton" class="ghost-button" type="button">Clear Keep Boxes</button>
+              <button id="clearSubtractBoxesButton" class="ghost-button" type="button">Clear Remove Boxes</button>
+            </div>
+            <div class="btn-row" style="margin-bottom:10px">
+              <button id="clearBrushKeepButton" class="ghost-button" type="button">Clear Brush Keep</button>
+              <button id="clearBrushRemoveButton" class="ghost-button" type="button">Clear Brush Remove</button>
+              <button id="undoBrushEditButton" class="ghost-button" type="button">Undo Brush</button>
+            </div>
+            <p id="bgSampleMeta" class="helper-copy">Background samples: 0</p>
+            <p id="keepSampleMeta" class="helper-copy">UI keep points: 0</p>
+            <p id="keepBoxMeta" class="helper-copy">UI keep boxes: 0</p>
+            <p id="subtractBoxMeta" class="helper-copy">Scenery remove boxes: 0</p>
+            <p id="brushKeepMeta" class="helper-copy">Brush keep marks: 0</p>
+            <p id="brushRemoveMeta" class="helper-copy">Brush remove marks: 0</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right: Preview area -->
+      <section class="cutter-preview-area">
+        <div class="preview-row">
+          <div id="previewStack">
+            <div class="preview-card">
+              <div class="preview-head"><h3>Original</h3><p id="originalMeta">No image loaded</p></div>
+              <div class="preview-canvas-wrap checkerboard"><canvas id="originalCanvas"></canvas></div>
+            </div>
+          </div>
+          <div class="preview-card">
+            <div class="preview-head"><h3>Result Preview</h3><p id="resultMeta">No result yet</p></div>
+            <div id="resultPreviewWrap" class="preview-canvas-wrap checkerboard">
+              <canvas id="resultCanvas"></canvas>
+              <div id="resultBusy" class="result-busy">Processing image...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="split-panel-block">
+          <div class="split-panel-header">
+            <h3>Split Panels</h3>
+            <div class="split-filter-toggle" role="group">
+              <button id="showLikelyUiButton" class="ghost-button split-filter-button" type="button">Show likely UI only</button>
+              <button id="showAllPanelsButton" class="ghost-button split-filter-button" type="button">Show all panels</button>
+            </div>
+          </div>
+          <label class="field range-field split-filter-range">
+            <span>Hide tiny fragments under <strong id="splitMinPixelsValue">0</strong> px</span>
+            <input id="splitMinPixels" type="range" min="0" max="50000" value="0" step="500">
+          </label>
+          <label class="field split-sort-field">
+            <span>Sort split panels</span>
+            <select id="splitSortMode">
+              <option value="useful">Sort by usefulness</option>
+              <option value="area">Sort by size</option>
+              <option value="source">Sort by source type</option>
+            </select>
+          </label>
+          <div class="btn-row" style="margin-bottom:10px">
+            <button id="downloadPanelsButton" class="ghost-button" type="button">Download All Panels</button>
+          </div>
+          <div id="splitLinks" class="split-links">No split panels exported yet.</div>
+        </div>
+
+        <!-- AI Enhance Results -->
+        <div id="aiEnhanceBlock" class="split-panel-block" style="display:none">
+          <div class="split-panel-header">
+            <h3>AI Results</h3>
+          </div>
+          <div class="btn-row" style="margin-bottom:14px">
+            <button id="aiEnhanceButton" class="primary-button" type="button" style="background:var(--accent)">AI Enhance Colors</button>
+          </div>
+          <p id="aiEnhanceStatus" class="helper-copy">Click AI Enhance to restore original UI colors.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+            <div>
+              <div class="preview-head"><h3>Final Extraction</h3></div>
+              <div class="preview-canvas-wrap checkerboard" style="min-height:120px">
+                <canvas id="aiFinalCanvas"></canvas>
+              </div>
+              <button id="downloadFinalButton" class="ghost-button" type="button" style="width:100%;margin-top:8px">Download Final</button>
+            </div>
+            <div>
+              <div class="preview-head"><h3>Enhanced (Color Restored)</h3></div>
+              <div class="preview-canvas-wrap checkerboard" style="min-height:120px">
+                <canvas id="aiEnhancedCanvas"></canvas>
+              </div>
+              <button id="downloadEnhancedButton" class="ghost-button" type="button" style="width:100%;margin-top:8px" disabled>Download Enhanced</button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+    </div><!-- end tab-extraction -->
+
+    <!-- ══ TAB: Workflow Builder ══ -->
+    <div class="tab-page" id="tab-workflow">
     <section class="hero">
       <p class="eyebrow">Node-Based ComfyUI Builder</p>
       <h1>Build clean game assets without guessing what node goes where.</h1>
@@ -40,7 +364,7 @@
 
         <label class="field">
           <span>What kind of game UI do you want?</span>
-          <select name="style">
+          <select name="artStyle">
             <option value="fantasy">Fantasy RPG</option>
             <option value="scifi">Sci-Fi / Cyberpunk</option>
             <option value="pixel">Pixel Art</option>
@@ -127,337 +451,21 @@
         </div>
       </section>
     </section>
+    </div><!-- end tab-workflow -->
 
-    <section class="panel cutter-panel">
-      <div class="panel-heading panel-heading-wide">
-        <div>
-          <p class="eyebrow">Local Cleanup App</p>
-          <h2>3. Remove dark or light backgrounds without ComfyUI.</h2>
-          <p>Upload a UI sheet, choose whether you want true background removal or a tight object extract, preview it instantly, and export the result or the largest split panels.</p>
-        </div>
-      </div>
-
-      <div class="cutter-grid">
-        <section class="cutter-controls">
-          <label class="field">
-            <span>Source image</span>
-            <input id="bgInputFile" type="file" accept="image/png,image/jpeg,image/webp">
-          </label>
-
-          <label class="field">
-            <span>Extraction mode</span>
-            <select id="bgMode">
-              <option value="remove">Background removal</option>
-              <option value="crop">Tight object crop for dark mats</option>
-              <option value="multi">Multi-point background erase</option>
-              <option value="ai">AI auto mask (preview)</option>
-            </select>
-          </label>
-
-          <div class="ai-settings-block">
-            <p class="tool-group-label">AI Mask Assist</p>
-
-            <label class="field">
-              <span>Future AI model family</span>
-              <select id="bgAiSource">
-                <option value="bria">BRIA-style foreground mask</option>
-                <option value="isnet">IS-Net style detail mask</option>
-                <option value="hybrid">Hybrid UI + object mask</option>
-              </select>
-            </label>
-
-            <label class="field range-field">
-              <span>Mask Confidence <strong id="aiConfidenceValue">72</strong></span>
-              <input id="bgAiConfidence" type="range" min="1" max="100" value="72">
-            </label>
-
-            <label class="field range-field">
-              <span>Matte Refinement <strong id="aiMatteValue">68</strong></span>
-              <input id="bgAiMatte" type="range" min="0" max="100" value="68">
-            </label>
-
-            <label class="field range-field">
-              <span>Spill Suppression <strong id="aiSpillValue">62</strong></span>
-              <input id="bgAiSpill" type="range" min="0" max="100" value="62">
-            </label>
-
-            <label class="field checkbox-field">
-              <input id="bgAiRelight" type="checkbox">
-              <span>Prepare relight pass for new scene composites</span>
-            </label>
-
-            <label class="field checkbox-field">
-              <input id="bgAiInpaint" type="checkbox">
-              <span>Prepare scene-fill inpaint after subject removal</span>
-            </label>
-
-            <label class="field checkbox-field">
-              <input id="bgAiInvertMask" type="checkbox">
-              <span>Invert imported AI mask</span>
-            </label>
-
-            <label class="field range-field">
-              <span>Mask Expand / Contract <strong id="aiMaskExpandValue">0</strong></span>
-              <input id="bgAiMaskExpand" type="range" min="-12" max="12" value="0">
-            </label>
-
-            <label class="field range-field">
-              <span>Mask Feather <strong id="aiMaskFeatherValue">0</strong></span>
-              <input id="bgAiMaskFeather" type="range" min="0" max="12" value="0">
-            </label>
-
-            <label class="field checkbox-field">
-              <input id="bgAiCombineManual" type="checkbox" checked>
-              <span>Combine imported AI mask with manual keep/remove corrections</span>
-            </label>
-
-            <p class="helper-copy ai-helper-copy">AI mode is scaffolding for a future local model hook. Today it stores mask preferences and keeps manual refine tools available after the mask stage.</p>
-          </div>
-
-          <label class="field">
-            <span>Preset</span>
-            <select id="bgPreset">
-              <option value="ui-balanced">UI Balanced</option>
-              <option value="ui-soft">UI Soft</option>
-              <option value="ui-hard">UI Hard</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Background tone</span>
-            <select id="bgTone">
-              <option value="dark">Dark background</option>
-              <option value="light">Light background</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Output format</span>
-            <select id="bgLayout">
-              <option value="sheet">Keep original layout (same size)</option>
-              <option value="split">Preview separated assets</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Current mask input</span>
-            <select id="bgMaskSource">
-              <option value="processed">Processed mask</option>
-              <option value="manual">Manual corrections mask</option>
-              <option value="ai">Imported AI mask</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Preview target</span>
-            <select id="bgPreviewTarget">
-              <option value="result">Show extracted result</option>
-              <option value="mask">Show mask preview</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Separated asset export size</span>
-            <select id="bgPanelLayout">
-              <option value="crop">Tight crop each asset</option>
-              <option value="full">Keep original canvas size and position</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Editor workspace</span>
-            <select id="bgEditorView">
-              <option value="balanced">Balanced preview</option>
-              <option value="focus">Large original editor</option>
-            </select>
-          </label>
-
-          <label class="field range-field">
-            <span>Brush Size <strong id="brushSizeValue">22</strong></span>
-            <input id="bgBrushSize" type="range" min="4" max="80" value="22">
-          </label>
-
-          <label class="field range-field">
-            <span>Mask Overlay <strong id="maskOverlayValue">55</strong>%</span>
-            <input id="bgMaskOverlay" type="range" min="0" max="100" value="55">
-          </label>
-
-          <label class="field range-field">
-            <span>Threshold <strong id="thresholdValue">18</strong></span>
-            <input id="bgThreshold" type="range" min="0" max="80" value="18">
-          </label>
-
-          <label class="field range-field">
-            <span>Softness <strong id="softnessValue">24</strong></span>
-            <input id="bgSoftness" type="range" min="1" max="80" value="24">
-          </label>
-
-          <label class="field range-field">
-            <span>Alpha Floor <strong id="alphaFloorValue">8</strong></span>
-            <input id="bgAlphaFloor" type="range" min="0" max="64" value="8">
-          </label>
-
-          <label class="field range-field">
-            <span>Alpha Ceiling <strong id="alphaCeilingValue">245</strong></span>
-            <input id="bgAlphaCeiling" type="range" min="192" max="255" value="245">
-          </label>
-
-          <label class="field range-field">
-            <span>Split Alpha Cutoff <strong id="componentAlphaValue">220</strong></span>
-            <input id="bgComponentAlpha" type="range" min="64" max="255" value="220">
-          </label>
-
-          <label class="field range-field">
-            <span>Minimum Split Size <strong id="componentPixelsValue">5000</strong></span>
-            <input id="bgComponentPixels" type="range" min="500" max="50000" step="500" value="5000">
-          </label>
-
-          <label class="field range-field">
-            <span>Component Padding <strong id="componentPadValue">2</strong></span>
-            <input id="bgComponentPad" type="range" min="0" max="32" value="2">
-          </label>
-
-          <label class="field range-field">
-            <span>Object Padding <strong id="objectPadValue">12</strong></span>
-            <input id="bgObjectPad" type="range" min="0" max="80" value="12">
-          </label>
-
-          <label class="field checkbox-field">
-            <input id="bgCropTransparent" type="checkbox">
-            <span>Crop transparent borders on the main export</span>
-          </label>
-
-          <label class="field checkbox-field">
-            <input id="bgDecontaminate" type="checkbox" checked>
-            <span>Clean background halos on semi-transparent edges</span>
-          </label>
-
-          <label class="field range-field">
-            <span>Edge Cleanup Strength <strong id="edgeCleanupValue">55</strong></span>
-            <input id="bgEdgeCleanupStrength" type="range" min="0" max="100" value="55">
-          </label>
-
-          <label class="field checkbox-field">
-            <input id="bgStrongBorderRepair" type="checkbox">
-            <span>Repair border edges (strong)</span>
-          </label>
-
-          <label class="field checkbox-field">
-            <input id="bgPreserveColor" type="checkbox" checked>
-            <span>Preserve original asset colors in the main preview/export</span>
-          </label>
-
-          <label class="field checkbox-field">
-            <input id="bgSecondPass" type="checkbox">
-            <span>Use second-pass edge refinement</span>
-          </label>
-
-          <div class="button-row">
-            <button id="processBgButton" class="primary-button" type="button">Process Image</button>
-            <button id="cancelBgButton" class="ghost-button" type="button">Cancel</button>
-            <button id="downloadBgButton" class="ghost-button" type="button">Download Preview PNG</button>
-            <button id="downloadLayoutButton" class="ghost-button" type="button">Download Full Sheet PNG</button>
-            <button id="downloadMaskButton" class="ghost-button" type="button">Download Mask PNG</button>
-          </div>
-          <div class="button-row">
-            <label class="ghost-button file-button" for="aiMaskInput">Load AI Mask PNG</label>
-            <input id="aiMaskInput" type="file" accept="image/png,image/webp,image/jpeg" hidden>
-          </div>
-          <p class="helper-copy">Use "Load AI Mask PNG" plus "Current mask input = Imported AI mask" to drive extraction from an external matte. "Future AI model family" only stages which local model style we plan to connect later.</p>
-          <p class="tool-group-label">Sampling & Protection</p>
-          <div class="button-row">
-            <button id="sampleBgButton" class="ghost-button" type="button">Sample Background Point(s)</button>
-            <button id="sampleKeepButton" class="ghost-button" type="button">Mark UI Keep Point(s)</button>
-            <button id="sampleKeepBoxButton" class="ghost-button" type="button">Draw UI Keep Box(es)</button>
-            <button id="sampleSubtractBoxButton" class="ghost-button" type="button">Draw Scenery Remove Box(es)</button>
-            <button id="eraseKeepBoxButton" class="ghost-button" type="button">Erase Bad Keep Box(es)</button>
-            <button id="autoDetectUiButton" class="ghost-button" type="button">Auto-Detect UI Box(es)</button>
-            <button id="clearKeepBoxesButton" class="ghost-button" type="button">Clear UI Keep Box(es)</button>
-            <button id="clearSubtractBoxesButton" class="ghost-button" type="button">Clear Scenery Remove Box(es)</button>
-            <button id="clearBrushKeepButton" class="ghost-button" type="button">Clear Brush Keep Marks</button>
-            <button id="clearBrushRemoveButton" class="ghost-button" type="button">Clear Brush Remove Marks</button>
-          </div>
-          <p id="bgSampleMeta" class="sampling-copy">Background samples: 0</p>
-          <p id="keepSampleMeta" class="sampling-copy">UI keep points: 0</p>
-          <p id="keepBoxMeta" class="sampling-copy">UI keep boxes: 0</p>
-          <p id="subtractBoxMeta" class="sampling-copy">Scenery remove boxes: 0</p>
-          <p id="brushKeepMeta" class="sampling-copy">Brush keep marks: 0</p>
-          <p id="brushRemoveMeta" class="sampling-copy">Brush remove marks: 0</p>
-          <p class="helper-copy">Use keep boxes for whole bars or panels, brush keep for ornate edges, brush remove for stray junk, and scenery remove boxes for larger unwanted regions.</p>
-
-          <div class="button-row">
-            <button id="downloadPanelsButton" class="ghost-button" type="button">Download Split Panels</button>
-            <button id="undoBrushEditButton" class="ghost-button" type="button">Undo Last Brush Edit</button>
-          </div>
-          <p class="tool-group-label">Quick Protect</p>
-          <div class="button-row">
-            <button id="protectTopBarButton" class="ghost-button" type="button">Protect Top Bar</button>
-            <button id="protectBottomBarButton" class="ghost-button" type="button">Protect Bottom Bar</button>
-            <button id="protectIconStripButton" class="ghost-button" type="button">Protect Icon Strip</button>
-            <button id="brushKeepButton" class="ghost-button" type="button">Brush Keep Edges</button>
-            <button id="brushRemoveButton" class="ghost-button" type="button">Brush Remove Junk</button>
-          </div>
-
-          <p id="bgStatus" class="status-copy">Upload an image to start.</p>
-          <div id="maskStatusBlock" class="status-copy mask-status-block">
-            <strong>Mask pipeline</strong><br>
-            Source: Heuristic processed mask<br>
-            Matte refinement: Heuristic edge cleanup<br>
-            AI hook: Not connected yet
-          </div>
-        </section>
-
-        <section class="cutter-preview-area">
-          <div id="previewStack" class="preview-stack">
-            <div class="preview-card">
-              <div class="preview-head">
-                <h3>Original</h3>
-                <p id="originalMeta">No image loaded</p>
-              </div>
-              <div class="preview-canvas-wrap checkerboard">
-                <canvas id="originalCanvas"></canvas>
-              </div>
-            </div>
-
-            <div class="preview-card">
-              <div class="preview-head">
-                <h3>Result Preview</h3>
-                <p id="resultMeta">No result yet</p>
-              </div>
-              <div id="resultPreviewWrap" class="preview-canvas-wrap checkerboard">
-                <canvas id="resultCanvas"></canvas>
-                <div id="resultBusy" class="result-busy" aria-hidden="true">Processing image...</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="output-block split-panel-block">
-            <div class="split-panel-header">
-              <h3>Split Panels</h3>
-              <div class="split-filter-toggle" role="group" aria-label="Split panel filter">
-                <button id="showLikelyUiButton" class="ghost-button split-filter-button split-filter-button-active" type="button">Show likely UI only</button>
-                <button id="showAllPanelsButton" class="ghost-button split-filter-button" type="button">Show all panels</button>
-              </div>
-            </div>
-            <label class="field range-field split-filter-range">
-              <span>Hide tiny fragments under <strong id="splitMinPixelsValue">0</strong> px</span>
-              <input id="splitMinPixels" type="range" min="0" max="250000" step="500" value="0">
-            </label>
-            <label class="field split-sort-field">
-              <span>Sort split panels</span>
-              <select id="splitSortMode">
-                <option value="useful">Sort by usefulness</option>
-                <option value="area">Sort by size</option>
-                <option value="source">Sort by source type</option>
-              </select>
-            </label>
-            <div id="splitLinks" class="split-links empty-state">No split panels exported yet.</div>
-          </div>
-        </section>
-      </div>
-    </section>
+    </div><!-- end main-content -->
   </main>
-
+  <script>
+  function showTab(name){
+    document.querySelectorAll('.tab-page').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));
+    var tab=document.getElementById('tab-'+name);if(tab)tab.classList.add('active');
+    var link=document.querySelector('.sidebar-link[data-tab="'+name+'"]');if(link)link.classList.add('active');
+  }
+  document.querySelectorAll('.sidebar-link[data-tab]').forEach(function(l){
+    l.addEventListener('click',function(){showTab(this.dataset.tab);});
+  });
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

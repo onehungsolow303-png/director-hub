@@ -31,9 +31,56 @@ const removers = {
 };
 
 const bgPresets = {
-  "ui-balanced": { threshold: 18, softness: 24, alphaFloor: 8, alphaCeiling: 245, componentAlpha: 220, componentPixels: 5000, componentPad: 2, objectPad: 12, cropTransparent: false, decontaminate: true, tone: "dark" },
-  "ui-soft": { threshold: 14, softness: 34, alphaFloor: 4, alphaCeiling: 245, componentAlpha: 200, componentPixels: 5000, componentPad: 4, objectPad: 16, cropTransparent: false, decontaminate: true, tone: "dark" },
-  "ui-hard": { threshold: 24, softness: 16, alphaFloor: 12, alphaCeiling: 238, componentAlpha: 228, componentPixels: 7000, componentPad: 2, objectPad: 10, cropTransparent: false, decontaminate: true, tone: "dark" }
+  // Dark background presets (game screenshots, complex scenic backgrounds)
+  "dark-balanced": {
+    threshold: 18, softness: 24, alphaFloor: 8, alphaCeiling: 245,
+    componentAlpha: 220, componentPixels: 5000, componentPad: 2, objectPad: 12,
+    cropTransparent: false, decontaminate: true, tone: "dark",
+    edgeCleanupStrength: 65, strongBorderRepair: false, preserveColor: true, secondPass: false,
+    aiConfidence: 72, aiMatte: 68, aiSpill: 62, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0,
+    comfyui: { model: "BiRefNet-general", mask_blur: 0, mask_offset: 0, invert_output: false, refine_foreground: false, background: "Alpha" }
+  },
+  "dark-soft": {
+    threshold: 14, softness: 34, alphaFloor: 4, alphaCeiling: 245,
+    componentAlpha: 200, componentPixels: 5000, componentPad: 4, objectPad: 16,
+    cropTransparent: false, decontaminate: true, tone: "dark",
+    edgeCleanupStrength: 45, strongBorderRepair: false, preserveColor: true, secondPass: false,
+    aiConfidence: 68, aiMatte: 72, aiSpill: 55, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1,
+    comfyui: { model: "BiRefNet-general", mask_blur: 1, mask_offset: 0, invert_output: false, refine_foreground: false, background: "Alpha" }
+  },
+  "dark-hard": {
+    threshold: 24, softness: 16, alphaFloor: 12, alphaCeiling: 238,
+    componentAlpha: 228, componentPixels: 7000, componentPad: 2, objectPad: 10,
+    cropTransparent: false, decontaminate: true, tone: "dark",
+    edgeCleanupStrength: 80, strongBorderRepair: false, preserveColor: false, secondPass: true,
+    aiConfidence: 78, aiMatte: 62, aiSpill: 70, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0,
+    comfyui: { model: "BiRefNet-general", mask_blur: 0, mask_offset: 0, invert_output: false, refine_foreground: false, background: "Alpha" }
+  },
+  // Light background presets (UI sheets with white/light grey backgrounds)
+  "light-balanced": {
+    threshold: 12, softness: 20, alphaFloor: 6, alphaCeiling: 248,
+    componentAlpha: 220, componentPixels: 5000, componentPad: 2, objectPad: 12,
+    cropTransparent: false, decontaminate: true, tone: "light",
+    edgeCleanupStrength: 55, strongBorderRepair: true, preserveColor: true, secondPass: false,
+    aiConfidence: 72, aiMatte: 68, aiSpill: 45, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0,
+    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 0.95, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+  },
+  "light-soft": {
+    threshold: 10, softness: 28, alphaFloor: 2, alphaCeiling: 248,
+    componentAlpha: 200, componentPixels: 4000, componentPad: 4, objectPad: 16,
+    cropTransparent: false, decontaminate: true, tone: "light",
+    edgeCleanupStrength: 40, strongBorderRepair: false, preserveColor: true, secondPass: false,
+    aiConfidence: 66, aiMatte: 72, aiSpill: 35, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1,
+    comfyui: { model: "RMBG-2.0", mask_blur: 1, mask_offset: 0, sensitivity: 0.90, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+  },
+  "light-hard": {
+    threshold: 16, softness: 14, alphaFloor: 10, alphaCeiling: 242,
+    componentAlpha: 228, componentPixels: 6000, componentPad: 2, objectPad: 10,
+    cropTransparent: false, decontaminate: true, tone: "light",
+    edgeCleanupStrength: 80, strongBorderRepair: true, preserveColor: false, secondPass: true,
+    aiConfidence: 78, aiMatte: 62, aiSpill: 55, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0,
+    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 1.0, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+  }
 };
 
 const form = document.querySelector("#workflowForm");
@@ -126,6 +173,34 @@ const splitMinPixelsValue = document.querySelector("#splitMinPixelsValue");
 const splitSortMode = document.querySelector("#splitSortMode");
 const previewStack = document.querySelector("#previewStack");
 const undoBrushEditButton = document.querySelector("#undoBrushEditButton");
+const batchModeToggle = document.querySelector("#batchModeToggle");
+const batchInputFiles = document.querySelector("#batchInputFiles");
+const singleFileField = document.querySelector("#singleFileField");
+const batchFileField = document.querySelector("#batchFileField");
+const batchFileCount = document.querySelector("#batchFileCount");
+const batchProgressBlock = document.querySelector("#batchProgressBlock");
+const batchProgressLabel = document.querySelector("#batchProgressLabel");
+const batchCurrentFile = document.querySelector("#batchCurrentFile");
+const batchProgressBar = document.querySelector("#batchProgressBar");
+const batchAiSource = document.querySelector("#batchAiSource");
+const batchAiSourceField = document.querySelector("#batchAiSourceField");
+const comfyuiServer = document.querySelector("#comfyuiServer");
+const comfyuiModel = document.querySelector("#comfyuiModel");
+const comfyuiConnectButton = document.querySelector("#comfyuiConnectButton");
+const comfyuiGenerateMaskButton = document.querySelector("#comfyuiGenerateMaskButton");
+const comfyuiStatus = document.querySelector("#comfyuiStatus");
+const browserMaskButton = document.querySelector("#browserMaskButton");
+const browserMaskStatus = document.querySelector("#browserMaskStatus");
+const aiRemoveButton = document.querySelector("#aiRemoveButton");
+const aiRemoveStatus = document.querySelector("#aiRemoveStatus");
+const comfyuiDot = document.querySelector("#comfyuiDot");
+const aiEnhanceBlock = document.querySelector("#aiEnhanceBlock");
+const aiEnhanceButton = document.querySelector("#aiEnhanceButton");
+const aiEnhanceStatus = document.querySelector("#aiEnhanceStatus");
+const aiFinalCanvas = document.querySelector("#aiFinalCanvas");
+const aiEnhancedCanvas = document.querySelector("#aiEnhancedCanvas");
+const downloadFinalButton = document.querySelector("#downloadFinalButton");
+const downloadEnhancedButton = document.querySelector("#downloadEnhancedButton");
 
 const thresholdValue = document.querySelector("#thresholdValue");
 const softnessValue = document.querySelector("#softnessValue");
@@ -154,6 +229,9 @@ let processedMaskAlpha = null;
 let manualMaskCanvas = null;
 let aiMaskCanvas = null;
 let importedAiMaskAlpha = null;
+let comfyuiConnected = false;
+let onnxSession = null;
+let onnxModelLoading = false;
 let manualBackgroundColor = null;
 let manualBackgroundSamples = [];
 let manualKeepSamples = [];
@@ -177,6 +255,11 @@ let processedLayoutCanvas = null;
 let splitPanelLayoutMode = "crop";
 let brushEditHistory = [];
 let activeBrushStroke = null;
+let batchModeActive = false;
+let batchFiles = [];
+let batchProcessing = false;
+let batchResults = [];
+let batchCancelRequested = false;
 
 const MAX_KEEP_BOXES = 24;
 const MAX_KEEP_POINTS = 12;
@@ -187,7 +270,7 @@ function formStateToConfig() {
   const data = new FormData(form);
   return {
     workflowType: data.get("workflowType"),
-    style: data.get("style"),
+    style: data.get("artStyle"),
     checkpoint: data.get("checkpoint"),
     remover: data.get("remover"),
     assetType: String(data.get("assetType") || "").trim() || "game ui asset",
@@ -328,11 +411,11 @@ function updateMaskStatusBlock() {
     : bgDecontaminate && bgDecontaminate.checked
       ? "Heuristic edge cleanup active"
       : "No edge cleanup";
-  const aiLabel = aiMaskCanvas
-    ? "AI hook: External AI mask loaded"
-    : source === "ai"
-      ? "AI hook: Placeholder only, no local model connected yet"
-      : "AI hook: Not connected yet";
+  const aiLabel = comfyuiConnected
+    ? "AI hook: ComfyUI connected"
+    : aiMaskCanvas
+      ? "AI hook: External AI mask loaded"
+      : "AI hook: Not connected — use 'Test Connection' or 'Generate AI Mask'";
 
   maskStatusBlock.innerHTML = `<strong>Mask pipeline</strong><br>Source: ${sourceLabel}<br>Matte refinement: ${matteLabel}<br>${aiLabel}`;
 }
@@ -340,7 +423,9 @@ function updateMaskStatusBlock() {
 function getIdleGuidanceMessage() {
   if (!loadedImage) return "Upload an image to start.";
   if (bgMode.value === "ai") {
-    return `AI auto mask preview mode is ready. Future model family: ${bgAiSource ? bgAiSource.value : "bria"}. Use 'Load AI Mask PNG' plus 'Current mask input = Imported AI mask' if you already have an external matte. The local model hook is not wired yet, so this section currently stages future AI settings. ${getImageWorkHint(loadedImage.width, loadedImage.height)}`;
+    return comfyuiConnected
+      ? `AI mode ready. Click 'Generate AI Mask' to run segmentation via ComfyUI, or 'Load AI Mask PNG' for an external matte. ${getImageWorkHint(loadedImage.width, loadedImage.height)}`
+      : `AI mode ready. Click 'Generate AI Mask' to connect to ComfyUI and run segmentation, or 'Load AI Mask PNG' for an external matte. ${getImageWorkHint(loadedImage.width, loadedImage.height)}`;
   }
   if (bgMode.value === "multi" && manualBackgroundSamples.length === 0) {
     return "Multi-point mode: click 'Sample Background Point(s)' and add 3-4 empty background clicks.";
@@ -358,17 +443,24 @@ function updateActionStates() {
   const samplingAllowed = hasImage && !isProcessing;
   const needsSamples = bgMode && bgMode.value === "multi" && manualBackgroundSamples.length === 0;
   const needsImportedAiMask = bgMode && bgMode.value === "ai" && bgMaskSource && bgMaskSource.value === "ai" && !importedAiMaskAlpha;
-  const canProcess = hasImage && !needsSamples && !needsImportedAiMask && !isProcessing;
+  const canProcess = batchModeActive
+    ? (batchFiles.length > 0 && !isProcessing)
+    : (hasImage && !needsSamples && !needsImportedAiMask && !isProcessing);
 
   if (processBgButton) {
     processBgButton.disabled = !canProcess;
-    processBgButton.title = !hasImage
-      ? "Upload an image first."
-      : needsSamples
-        ? "Add 3-4 background sample clicks first."
-        : needsImportedAiMask
-          ? "Load an AI mask PNG first, or change Current mask input away from Imported AI mask."
-        : "";
+    processBgButton.textContent = batchModeActive
+      ? `Process ${batchFiles.length} Image${batchFiles.length !== 1 ? "s" : ""}`
+      : "Process Image";
+    processBgButton.title = batchModeActive
+      ? (batchFiles.length === 0 ? "Select images first." : "")
+      : !hasImage
+        ? "Upload an image first."
+        : needsSamples
+          ? "Add 3-4 background sample clicks first."
+          : needsImportedAiMask
+            ? "Load an AI mask PNG first, or change Current mask input away from Imported AI mask."
+          : "";
   }
   if (bgMaskSource) {
     const hasAnyMask = Boolean(processedMaskCanvas || manualMaskCanvas || aiMaskCanvas);
@@ -488,15 +580,15 @@ function updateRangeLabels() {
   if (aiSpillValue) aiSpillValue.textContent = bgAiSpill ? bgAiSpill.value : "62";
   if (aiMaskExpandValue) aiMaskExpandValue.textContent = bgAiMaskExpand ? bgAiMaskExpand.value : "0";
   if (aiMaskFeatherValue) aiMaskFeatherValue.textContent = bgAiMaskFeather ? bgAiMaskFeather.value : "0";
-  if (thresholdValue) thresholdValue.textContent = bgThreshold.value;
-  if (softnessValue) softnessValue.textContent = bgSoftness.value;
-  if (alphaFloorValue) alphaFloorValue.textContent = bgAlphaFloor.value;
-  if (alphaCeilingValue) alphaCeilingValue.textContent = bgAlphaCeiling.value;
+  if (thresholdValue && bgThreshold) thresholdValue.textContent = bgThreshold.value;
+  if (softnessValue && bgSoftness) softnessValue.textContent = bgSoftness.value;
+  if (alphaFloorValue && bgAlphaFloor) alphaFloorValue.textContent = bgAlphaFloor.value;
+  if (alphaCeilingValue && bgAlphaCeiling) alphaCeilingValue.textContent = bgAlphaCeiling.value;
   if (edgeCleanupValue) edgeCleanupValue.textContent = bgEdgeCleanupStrength ? bgEdgeCleanupStrength.value : "55";
-  if (componentAlphaValue) componentAlphaValue.textContent = bgComponentAlpha.value;
-  if (componentPixelsValue) componentPixelsValue.textContent = bgComponentPixels.value;
-  if (componentPadValue) componentPadValue.textContent = bgComponentPad.value;
-  if (objectPadValue) objectPadValue.textContent = bgObjectPad.value;
+  if (componentAlphaValue && bgComponentAlpha) componentAlphaValue.textContent = bgComponentAlpha.value;
+  if (componentPixelsValue && bgComponentPixels) componentPixelsValue.textContent = bgComponentPixels.value;
+  if (componentPadValue && bgComponentPad) componentPadValue.textContent = bgComponentPad.value;
+  if (objectPadValue && bgObjectPad) objectPadValue.textContent = bgObjectPad.value;
 }
 
 function getCurrentBrushRadius() {
@@ -532,7 +624,7 @@ function clearBrushHistory() {
 function undoLastBrushEdit() {
   const last = brushEditHistory.pop();
   if (!last) {
-    bgStatus.textContent = "No brush edit to undo.";
+    if (bgStatus) bgStatus.textContent = "No brush edit to undo.";
     updateActionStates();
     return;
   }
@@ -541,7 +633,7 @@ function undoLastBrushEdit() {
   updateSampleMeta();
   renderOriginalPreview();
   updateActionStates();
-  bgStatus.textContent = `Undid last ${last.kind === "keep" ? "brush keep" : "brush remove"} edit.`;
+  if (bgStatus) bgStatus.textContent = `Undid last ${last.kind === "keep" ? "brush keep" : "brush remove"} edit.`;
 }
 
 function updateEditorLayout() {
@@ -552,6 +644,7 @@ function updateEditorLayout() {
 function applyPreset(name) {
   const preset = bgPresets[name];
   if (!preset) return;
+  // Core heuristic settings
   bgThreshold.value = preset.threshold;
   bgSoftness.value = preset.softness;
   bgAlphaFloor.value = preset.alphaFloor;
@@ -562,9 +655,21 @@ function applyPreset(name) {
   bgObjectPad.value = preset.objectPad;
   bgCropTransparent.checked = preset.cropTransparent;
   bgDecontaminate.checked = preset.decontaminate;
-  if (bgEdgeCleanupStrength) bgEdgeCleanupStrength.value = "55";
-  if (bgStrongBorderRepair) bgStrongBorderRepair.checked = false;
   bgTone.value = preset.tone;
+  // Advanced edge/color settings
+  if (bgEdgeCleanupStrength) bgEdgeCleanupStrength.value = String(preset.edgeCleanupStrength ?? 55);
+  if (bgStrongBorderRepair) bgStrongBorderRepair.checked = preset.strongBorderRepair ?? true;
+  if (bgPreserveColor) bgPreserveColor.checked = preset.preserveColor ?? true;
+  if (bgSecondPass) bgSecondPass.checked = preset.secondPass ?? false;
+  // AI pipeline settings
+  if (bgAiConfidence) bgAiConfidence.value = String(preset.aiConfidence ?? 72);
+  if (bgAiMatte) bgAiMatte.value = String(preset.aiMatte ?? 68);
+  if (bgAiSpill) bgAiSpill.value = String(preset.aiSpill ?? 62);
+  if (bgAiInvertMask) bgAiInvertMask.checked = preset.aiInvertMask ?? false;
+  if (bgAiMaskExpand) bgAiMaskExpand.value = String(preset.aiMaskExpand ?? 0);
+  if (bgAiMaskFeather) bgAiMaskFeather.value = String(preset.aiMaskFeather ?? 0);
+  // ComfyUI model selection from preset
+  if (preset.comfyui && comfyuiModel) comfyuiModel.value = preset.comfyui.model;
   updateRangeLabels();
 }
 
@@ -573,6 +678,70 @@ function createCanvas(width, height) {
   canvas.width = width;
   canvas.height = height;
   return canvas;
+}
+
+/**
+ * Draw an Image onto a canvas preserving RGB even when alpha=0.
+ * ComfyUI outputs masks as RGBA with alpha=0 but data in RGB.
+ * Canvas drawImage uses premultiplied alpha, zeroing RGB when alpha=0.
+ * This function draws via putImageData (which bypasses premultiplication)
+ * by first rendering through a WebGL context configured for unpremultiplied alpha.
+ */
+function drawImagePreservingRGB(image, canvas) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  // Try drawing normally first
+  ctx.drawImage(image, 0, 0);
+  // Quick check: sample a few pixels to see if data survived
+  const testData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const total = canvas.width * canvas.height;
+  const sampleStep = Math.max(1, Math.floor(total / 2000));
+  let anyRGB = false;
+  for (let i = 0; i < total; i += sampleStep) {
+    if (testData[i * 4] > 0 || testData[i * 4 + 1] > 0 || testData[i * 4 + 2] > 0) {
+      anyRGB = true;
+      break;
+    }
+  }
+  if (anyRGB) return; // Normal path worked fine
+
+  // RGB was destroyed by premultiplied alpha — recover via WebGL
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2", { premultipliedAlpha: false })
+             || document.createElement("canvas").getContext("webgl", { premultipliedAlpha: false });
+    if (!gl) return; // No WebGL, can't recover
+    gl.canvas.width = image.width;
+    gl.canvas.height = image.height;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    // Read pixels (unpremultiplied)
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const pixels = new Uint8Array(image.width * image.height * 4);
+    gl.readPixels(0, 0, image.width, image.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.deleteTexture(tex);
+    gl.deleteFramebuffer(fb);
+    // WebGL reads bottom-up; flip vertically
+    const rowBytes = image.width * 4;
+    const temp = new Uint8Array(rowBytes);
+    for (let y = 0; y < Math.floor(image.height / 2); y++) {
+      const topOff = y * rowBytes;
+      const botOff = (image.height - 1 - y) * rowBytes;
+      temp.set(pixels.subarray(topOff, topOff + rowBytes));
+      pixels.copyWithin(topOff, botOff, botOff + rowBytes);
+      pixels.set(temp, botOff);
+    }
+    // Set alpha to 255 so future drawImage calls don't destroy RGB again
+    for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255;
+    const imgData = new ImageData(new Uint8ClampedArray(pixels.buffer), image.width, image.height);
+    ctx.putImageData(imgData, 0, 0);
+  } catch (_e) {
+    // WebGL fallback failed; data stays as-is
+  }
 }
 
 function createMaskCanvasFromAlpha(alpha, width, height) {
@@ -592,37 +761,73 @@ function createMaskCanvasFromAlpha(alpha, width, height) {
 }
 
 function alphaFromMaskCanvas(canvas) {
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  const alpha = new Uint8ClampedArray(canvas.width * canvas.height);
-  for (let index = 0; index < alpha.length; index += 1) {
+  const total = canvas.width * canvas.height;
+  const alpha = new Uint8ClampedArray(total);
+
+  // Try RGB first (grayscale mask), then alpha channel, then whichever has data
+  let rgbSum = 0, alphaSum = 0;
+  const sampleCount = Math.min(total, 5000);
+  const step = Math.max(1, Math.floor(total / sampleCount));
+  for (let i = 0; i < total; i += step) {
+    rgbSum += Math.max(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
+    alphaSum += data[i * 4 + 3];
+  }
+
+  // If RGB has meaningful variation, use it. Otherwise try alpha channel.
+  const rgbMean = rgbSum / sampleCount;
+  const alphaMean = alphaSum / sampleCount;
+  const useAlpha = rgbMean < 1 && alphaMean > 0 && alphaMean < 254;
+
+  for (let index = 0; index < total; index += 1) {
     const offset = index * 4;
-    alpha[index] = Math.max(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
+    alpha[index] = useAlpha
+      ? data[offset + 3]
+      : Math.max(data[offset], data[offset + 1], data[offset + 2]);
   }
   return alpha;
 }
 
 function boxBlurAlpha(alpha, width, height, radius) {
   if (radius <= 0) return new Uint8ClampedArray(alpha);
-  const result = new Uint8ClampedArray(alpha.length);
+  const size = radius * 2 + 1;
+  let current = alpha;
+  let next = new Uint8ClampedArray(alpha.length);
+
+  // Horizontal pass with running sum
   for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      let total = 0;
-      let count = 0;
-      for (let oy = -radius; oy <= radius; oy += 1) {
-        const ny = y + oy;
-        if (ny < 0 || ny >= height) continue;
-        for (let ox = -radius; ox <= radius; ox += 1) {
-          const nx = x + ox;
-          if (nx < 0 || nx >= width) continue;
-          total += alpha[(ny * width) + nx];
-          count += 1;
-        }
-      }
-      result[(y * width) + x] = Math.round(total / Math.max(1, count));
+    const rowStart = y * width;
+    let sum = 0;
+    for (let x = -radius; x <= radius; x += 1) {
+      sum += current[rowStart + Math.max(0, Math.min(width - 1, x))];
+    }
+    next[rowStart] = Math.round(sum / size);
+    for (let x = 1; x < width; x += 1) {
+      sum += current[rowStart + Math.min(width - 1, x + radius)]
+           - current[rowStart + Math.max(0, x - radius - 1)];
+      next[rowStart + x] = Math.round(sum / size);
     }
   }
-  return result;
+
+  current = next;
+  next = new Uint8ClampedArray(alpha.length);
+
+  // Vertical pass with running sum
+  for (let x = 0; x < width; x += 1) {
+    let sum = 0;
+    for (let y = -radius; y <= radius; y += 1) {
+      sum += current[Math.max(0, Math.min(height - 1, y)) * width + x];
+    }
+    next[x] = Math.round(sum / size);
+    for (let y = 1; y < height; y += 1) {
+      sum += current[Math.min(height - 1, y + radius) * width + x]
+           - current[Math.max(0, y - radius - 1) * width + x];
+      next[y * width + x] = Math.round(sum / size);
+    }
+  }
+
+  return next;
 }
 
 function dilateAlpha(alpha, width, height, radius) {
@@ -706,6 +911,14 @@ function applyManualCorrectionsToAlpha(alpha, width, height, settings) {
 
 function refineImportedAiMaskAlpha(alpha, width, height, settings) {
   let refined = new Uint8ClampedArray(alpha);
+  // Binarize soft AI masks: AI segmentation models output graduated
+  // probability masks; without this step, background pixels with soft
+  // values become semi-transparent ghosts instead of being fully removed.
+  // Use midpoint threshold to produce clean 0/255 mask.
+  const threshold = 128;
+  for (let i = 0; i < refined.length; i += 1) {
+    refined[i] = refined[i] >= threshold ? 255 : 0;
+  }
   if (settings.aiInvertMask) {
     for (let i = 0; i < refined.length; i += 1) {
       refined[i] = 255 - refined[i];
@@ -776,10 +989,10 @@ function buildManualMaskCanvas(width, height, settings) {
   }
 
   if (settings.manualSubtractBoxes.length) {
-    applySubtractBoxesToAlpha(alpha, width, height, settings.manualSubtractBoxes);
+    alpha = applySubtractBoxesToAlpha(alpha, width, height, settings.manualSubtractBoxes);
   }
   if (settings.manualRemoveBrushPoints.length) {
-    applyBrushPointsToAlpha(alpha, width, height, settings.manualRemoveBrushPoints, 0);
+    alpha = applyBrushPointsToAlpha(alpha, width, height, settings.manualRemoveBrushPoints, 0);
   }
 
   return createMaskCanvasFromAlpha(alpha, width, height);
@@ -805,9 +1018,7 @@ function handleAiMaskInput(event) {
     }
 
     const canvas = createCanvas(image.width, image.height);
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, 0, 0);
+    drawImagePreservingRGB(image, canvas);
     importedAiMaskAlpha = alphaFromMaskCanvas(canvas);
     rebuildImportedAiMaskCanvas();
     if (bgMaskSource) bgMaskSource.value = "ai";
@@ -825,6 +1036,664 @@ function handleAiMaskInput(event) {
     if (aiMaskInput) aiMaskInput.value = "";
   };
   image.src = url;
+}
+
+// --- ComfyUI API Integration ---
+
+function getComfyuiBaseUrl() {
+  // Route through local proxy to avoid CORS issues
+  // The proxy at /comfyui/* forwards to the actual ComfyUI server
+  const origin = window.location.origin;
+  if (origin && origin !== "null" && !origin.startsWith("file")) {
+    return origin + "/comfyui";
+  }
+  return (comfyuiServer ? comfyuiServer.value : "http://127.0.0.1:8000").replace(/\/+$/, "");
+}
+
+async function testComfyuiConnection() {
+  const base = getComfyuiBaseUrl();
+  if (comfyuiStatus) comfyuiStatus.textContent = "ComfyUI: connecting...";
+  try {
+    const response = await fetch(`${base}/system_stats`, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const stats = await response.json();
+    comfyuiConnected = true;
+    const device = stats.devices?.[0]?.name || "unknown device";
+    if (comfyuiStatus) comfyuiStatus.textContent = `ComfyUI: connected (${device})`;
+    if (comfyuiDot) comfyuiDot.style.background = "#4c4";
+    updateActionStates();
+    return true;
+  } catch (error) {
+    comfyuiConnected = false;
+    if (comfyuiStatus) comfyuiStatus.textContent = `ComfyUI: not connected`;
+    if (comfyuiDot) comfyuiDot.style.background = "#c44";
+    updateActionStates();
+    return false;
+  }
+}
+
+async function comfyuiUploadImage(imageBlob, filename) {
+  const base = getComfyuiBaseUrl();
+  const formData = new FormData();
+  formData.append("image", imageBlob, filename);
+  formData.append("overwrite", "true");
+  const response = await fetch(`${base}/upload/image`, { method: "POST", body: formData });
+  if (!response.ok) throw new Error(`Upload failed: HTTP ${response.status}`);
+  return await response.json();
+}
+
+function getActiveComfyuiConfig() {
+  const presetName = bgPreset ? bgPreset.value : "dark-balanced";
+  const preset = bgPresets[presetName];
+  return preset ? preset.comfyui : null;
+}
+
+function buildSegmentationWorkflow(inputFilename, modelType, comfyuiConfig) {
+  // Build a minimal ComfyUI API workflow for background removal / segmentation
+  // Uses ComfyUI-RMBG node pack (1038lab)
+  // comfyuiConfig is optional — preset workflow params override defaults
+  const config = comfyuiConfig || {};
+  const isBiRefNet = modelType.startsWith("BiRefNet");
+  const classType = isBiRefNet ? "BiRefNetRMBG" : "RMBG";
+
+  const nodeInputs = isBiRefNet
+    ? {
+        "model": modelType,
+        "image": ["1", 0],
+        "mask_blur": config.mask_blur ?? 0,
+        "mask_offset": config.mask_offset ?? 0,
+        "invert_output": config.invert_output ?? false,
+        "refine_foreground": config.refine_foreground ?? false,
+        "background": config.background ?? "Alpha",
+        "background_color": "#222222"
+      }
+    : {
+        "model": modelType,
+        "image": ["1", 0],
+        "sensitivity": config.sensitivity ?? 1.0,
+        "process_res": config.process_res ?? 1024,
+        "mask_blur": config.mask_blur ?? 0,
+        "mask_offset": config.mask_offset ?? 0,
+        "invert_output": config.invert_output ?? false,
+        "refine_foreground": config.refine_foreground ?? false,
+        "background": config.background ?? "Alpha",
+        "background_color": "#222222"
+      };
+
+  return {
+    "1": {
+      "class_type": "LoadImage",
+      "inputs": { "image": inputFilename }
+    },
+    "2": {
+      "class_type": classType,
+      "inputs": nodeInputs
+    },
+    "3": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": "_aimask_output",
+        "images": ["2", 0]
+      }
+    }
+  };
+}
+
+async function comfyuiQueueWorkflow(workflow) {
+  const base = getComfyuiBaseUrl();
+  const clientId = "asset-editor-" + Date.now();
+  const body = { prompt: workflow, client_id: clientId };
+  const response = await fetch(`${base}/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Queue failed: HTTP ${response.status} — ${text.slice(0, 200)}`);
+  }
+  const result = await response.json();
+  return { promptId: result.prompt_id, clientId };
+}
+
+async function comfyuiPollForCompletion(promptId, timeoutMs = 120000) {
+  const base = getComfyuiBaseUrl();
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const response = await fetch(`${base}/history/${promptId}`);
+    if (response.ok) {
+      const history = await response.json();
+      if (history[promptId]) {
+        const entry = history[promptId];
+        if (entry.status?.completed || entry.outputs) {
+          return entry;
+        }
+        if (entry.status?.status_str === "error") {
+          throw new Error("ComfyUI workflow execution failed: " + JSON.stringify(entry.status));
+        }
+      }
+    }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  throw new Error("ComfyUI workflow timed out after " + (timeoutMs / 1000) + "s");
+}
+
+function extractOutputImageFilename(historyEntry) {
+  const outputs = historyEntry.outputs || {};
+  for (const nodeId of Object.keys(outputs)) {
+    const nodeOutput = outputs[nodeId];
+    if (nodeOutput.images && nodeOutput.images.length > 0) {
+      return nodeOutput.images[0];
+    }
+  }
+  throw new Error("No output image found in ComfyUI workflow result");
+}
+
+async function comfyuiDownloadImage(imageInfo) {
+  const base = getComfyuiBaseUrl();
+  const subfolder = imageInfo.subfolder || "";
+  const filename = imageInfo.filename;
+  const type = imageInfo.type || "output";
+  const url = `${base}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to download mask: HTTP ${response.status}`);
+  const blob = await response.blob();
+  return blob;
+}
+
+async function generateComfyuiMask() {
+  if (!loadedImage) {
+    if (bgStatus) bgStatus.textContent = "Load a source image first.";
+    return;
+  }
+  if (comfyuiStatus) comfyuiStatus.textContent = "ComfyUI: uploading image...";
+  if (bgStatus) bgStatus.textContent = "Generating AI mask via ComfyUI...";
+
+  try {
+    // Convert loaded image to blob for upload
+    const uploadCanvas = createCanvas(loadedImage.width, loadedImage.height);
+    uploadCanvas.getContext("2d").drawImage(loadedImage, 0, 0);
+    const blob = await new Promise(resolve => uploadCanvas.toBlob(resolve, "image/png"));
+    const uploadFilename = "asset_editor_input.png";
+
+    // Upload
+    await comfyuiUploadImage(blob, uploadFilename);
+    if (comfyuiStatus) comfyuiStatus.textContent = "ComfyUI: building workflow...";
+
+    // Build and queue workflow
+    const modelType = comfyuiModel ? comfyuiModel.value : "BiRefNet";
+    const workflow = buildSegmentationWorkflow(uploadFilename, modelType, getActiveComfyuiConfig());
+    const { promptId } = await comfyuiQueueWorkflow(workflow);
+    if (comfyuiStatus) comfyuiStatus.textContent = "ComfyUI: processing segmentation...";
+
+    // Poll for completion
+    const historyEntry = await comfyuiPollForCompletion(promptId);
+    if (comfyuiStatus) comfyuiStatus.textContent = "ComfyUI: downloading mask...";
+
+    // Have the server download and save the mask as a local static file
+    // This avoids the tainted-canvas problem (browser blocks getImageData on cross-origin images)
+    const outputImageInfo = extractOutputImageFilename(historyEntry);
+    const saveResp = await fetch("/save-mask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(outputImageInfo)
+    });
+    if (!saveResp.ok) throw new Error("Failed to save mask locally: " + (await saveResp.text()));
+
+    // Load mask as a true same-origin static file
+    const maskImg = new Image();
+    await new Promise((resolve, reject) => {
+      maskImg.onload = resolve;
+      maskImg.onerror = () => reject(new Error("Failed to load local mask file"));
+      maskImg.src = "/_temp_mask.png?t=" + Date.now();
+    });
+    // Draw mask preserving RGB even if alpha=0 (ComfyUI premultiply-alpha issue).
+    // The server-side /save-mask also fixes alpha, but this handles cached files.
+    const maskCanvas = createCanvas(maskImg.width, maskImg.height);
+    drawImagePreservingRGB(maskImg, maskCanvas);
+
+    // Scale to source image size if needed
+    let finalMaskCanvas = maskCanvas;
+    if (maskCanvas.width !== loadedImage.width || maskCanvas.height !== loadedImage.height) {
+      finalMaskCanvas = createCanvas(loadedImage.width, loadedImage.height);
+      finalMaskCanvas.getContext("2d", { willReadFrequently: true }).drawImage(maskCanvas, 0, 0, loadedImage.width, loadedImage.height);
+    }
+
+    importedAiMaskAlpha = alphaFromMaskCanvas(finalMaskCanvas);
+
+    // Auto-detect polarity: if most pixels are white, mask is inverted
+    // (background area is always larger than foreground UI)
+    let whiteCount = 0;
+    for (let i = 0; i < importedAiMaskAlpha.length; i++) {
+      if (importedAiMaskAlpha[i] > 128) whiteCount++;
+    }
+    const needsInvert = whiteCount > importedAiMaskAlpha.length * 0.5;
+    if (needsInvert) {
+      for (let i = 0; i < importedAiMaskAlpha.length; i++) {
+        importedAiMaskAlpha[i] = 255 - importedAiMaskAlpha[i];
+      }
+    }
+
+    // Uncheck manual invert since we already auto-corrected
+    if (bgAiInvertMask) bgAiInvertMask.checked = false;
+
+    rebuildImportedAiMaskCanvas();
+    if (bgMode) bgMode.value = "ai";
+    if (bgMaskSource) bgMaskSource.value = "ai";
+    if (bgPreviewTarget) bgPreviewTarget.value = "mask";
+    syncMainPreviewFromLayout();
+    updateActionStates();
+    updateMaskStatusBlock();
+    comfyuiConnected = true;
+    if (comfyuiStatus) comfyuiStatus.textContent = `ComfyUI: mask generated (${modelType}${needsInvert ? ", auto-inverted" : ""})`;
+    if (bgStatus) bgStatus.textContent = `AI mask ready. Click 'Process Image' to extract. Mode set to AI auto mask with imported mask.`;
+
+  } catch (error) {
+    console.error("ComfyUI mask generation failed:", error);
+    if (comfyuiStatus) comfyuiStatus.textContent = `ComfyUI: error — ${error.message}`;
+    if (bgStatus) bgStatus.textContent = `ComfyUI mask generation failed: ${error.message}`;
+  }
+}
+
+// --- AI Remove (one-click workflow) ---
+
+async function aiRemoveWorkflow() {
+  // Turn off batch mode if active — AI Remove works on single images
+  if (batchModeToggle && batchModeToggle.checked) {
+    batchModeToggle.checked = false;
+    batchModeToggle.dispatchEvent(new Event("change"));
+  }
+  if (!loadedImage) {
+    if (aiRemoveStatus) {
+      aiRemoveStatus.style.display = "block";
+      aiRemoveStatus.textContent = "Upload a single image first (uncheck Batch mode).";
+    }
+    return;
+  }
+
+  if (aiRemoveButton) aiRemoveButton.disabled = true;
+  if (aiRemoveStatus) {
+    aiRemoveStatus.style.display = "block";
+    aiRemoveStatus.textContent = "Step 1/2: Generating AI mask via ComfyUI...";
+  }
+
+  try {
+    // Step 1: Generate AI mask (this also sets mode to AI + mask source to imported)
+    await generateComfyuiMask();
+
+    // Verify mask was imported successfully
+    if (!importedAiMaskAlpha) {
+      throw new Error("AI mask generation did not produce a usable mask.");
+    }
+
+    // Ensure settings are correct for the refinement pipeline
+    if (bgMode) { bgMode.value = "ai"; bgMode.dispatchEvent(new Event("change")); }
+    if (bgMaskSource) { bgMaskSource.value = "ai"; bgMaskSource.dispatchEvent(new Event("change")); }
+    if (bgDecontaminate) bgDecontaminate.checked = true;
+    // Reset refinement settings that could empty the mask
+    if (bgAiInvertMask) bgAiInvertMask.checked = false;
+    if (bgAiMaskExpand) bgAiMaskExpand.value = 0;
+    if (bgAiMaskFeather) bgAiMaskFeather.value = 0;
+
+    // Validate mask coverage after refinement — if empty, try flipping polarity
+    const testSettings = getBgSettings();
+    let testAlpha = getRefinedImportedAiAlpha(testSettings);
+    let coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
+    if (coverage < 0.005) {
+      // Mask is empty after refinement — try inverting
+      for (let i = 0; i < importedAiMaskAlpha.length; i++) {
+        importedAiMaskAlpha[i] = 255 - importedAiMaskAlpha[i];
+      }
+      rebuildImportedAiMaskCanvas();
+      testAlpha = getRefinedImportedAiAlpha(testSettings);
+      coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
+      if (coverage < 0.005) {
+        throw new Error("AI mask is empty even after polarity correction. Try a different model.");
+      }
+    }
+    // If coverage is too high (>95%), the mask probably needs inverting
+    if (coverage > 0.95) {
+      for (let i = 0; i < importedAiMaskAlpha.length; i++) {
+        importedAiMaskAlpha[i] = 255 - importedAiMaskAlpha[i];
+      }
+      rebuildImportedAiMaskCanvas();
+    }
+
+    if (aiRemoveStatus) {
+      aiRemoveStatus.textContent = "Step 2/2: Extracting UI with edge protection...";
+      aiRemoveStatus.style.color = "var(--accent)";
+    }
+
+    // Auto-trigger Process Image
+    await processBackgroundImage();
+
+    if (aiRemoveStatus) {
+      aiRemoveStatus.textContent = "Done. Review results below and download.";
+      aiRemoveStatus.style.color = "var(--accent)";
+    }
+
+  } catch (error) {
+    console.error("AI Remove workflow failed:", error);
+    if (aiRemoveStatus) {
+      aiRemoveStatus.textContent = `AI Remove failed: ${error.message}`;
+      aiRemoveStatus.style.color = "#e44";
+    }
+  } finally {
+    if (aiRemoveButton) aiRemoveButton.disabled = false;
+  }
+}
+
+// --- AI Enhance (color restoration from original) ---
+
+let lastFinalCanvas = null;
+let lastEnhancedCanvas = null;
+
+function showAiEnhanceBlock() {
+  if (!aiEnhanceBlock || !processedLayoutCanvas) return;
+  aiEnhanceBlock.style.display = "block";
+  // Copy final result to the final preview canvas
+  const src = processedLayoutCanvas;
+  aiFinalCanvas.width = src.width;
+  aiFinalCanvas.height = src.height;
+  aiFinalCanvas.getContext("2d").drawImage(src, 0, 0);
+  lastFinalCanvas = src;
+  // Clear enhanced preview
+  aiEnhancedCanvas.width = 1;
+  aiEnhancedCanvas.height = 1;
+  if (downloadEnhancedButton) downloadEnhancedButton.disabled = true;
+  if (aiEnhanceStatus) {
+    aiEnhanceStatus.textContent = "Click AI Enhance to restore original UI colors at edges.";
+    aiEnhanceStatus.style.color = "";
+  }
+}
+
+function restoreEdgeColorsFromOriginal(finalCanvas, sourceCanvas) {
+  const width = finalCanvas.width;
+  const height = finalCanvas.height;
+  const finalCtx = finalCanvas.getContext("2d");
+  const sourceCtx = sourceCanvas.getContext("2d");
+  const finalData = finalCtx.getImageData(0, 0, width, height);
+  const sourceData = sourceCtx.getImageData(0, 0, width, height);
+  const fd = finalData.data;
+  const sd = sourceData.data;
+  const resultCanvas = createCanvas(width, height);
+  const resultCtx = resultCanvas.getContext("2d");
+  const resultData = resultCtx.createImageData(width, height);
+  const rd = resultData.data;
+
+  const opaqueThreshold = 240;
+  const transparentThreshold = 10;
+
+  for (let i = 0; i < fd.length; i += 4) {
+    const a = fd[i + 3];
+    rd[i + 3] = a;
+
+    if (a <= transparentThreshold) {
+      // Fully transparent — keep as zero
+      rd[i] = 0;
+      rd[i + 1] = 0;
+      rd[i + 2] = 0;
+      rd[i + 3] = 0;
+      continue;
+    }
+
+    if (a >= opaqueThreshold) {
+      // Fully opaque — keep processed colors (user: don't restore opaque)
+      rd[i] = fd[i];
+      rd[i + 1] = fd[i + 1];
+      rd[i + 2] = fd[i + 2];
+      continue;
+    }
+
+    // Partial alpha (edge pixel): blend original color back
+    // Higher alpha = more original, lower alpha = more processed
+    const blend = (a - transparentThreshold) / (opaqueThreshold - transparentThreshold);
+    rd[i]     = Math.round(fd[i]     * (1 - blend) + sd[i]     * blend);
+    rd[i + 1] = Math.round(fd[i + 1] * (1 - blend) + sd[i + 1] * blend);
+    rd[i + 2] = Math.round(fd[i + 2] * (1 - blend) + sd[i + 2] * blend);
+  }
+
+  resultCtx.putImageData(resultData, 0, 0);
+  return resultCanvas;
+}
+
+function runAiEnhance() {
+  if (!processedLayoutCanvas || !loadedImage) {
+    if (aiEnhanceStatus) aiEnhanceStatus.textContent = "Process an image first.";
+    return;
+  }
+  if (aiEnhanceStatus) {
+    aiEnhanceStatus.textContent = "Enhancing edge colors...";
+    aiEnhanceStatus.style.color = "var(--accent)";
+  }
+
+  // Create source canvas from loaded image
+  const sourceCanvas = createCanvas(loadedImage.width, loadedImage.height);
+  sourceCanvas.getContext("2d").drawImage(loadedImage, 0, 0);
+
+  // Restore edge colors
+  const enhanced = restoreEdgeColorsFromOriginal(processedLayoutCanvas, sourceCanvas);
+  lastEnhancedCanvas = enhanced;
+
+  // Show in preview
+  aiEnhancedCanvas.width = enhanced.width;
+  aiEnhancedCanvas.height = enhanced.height;
+  aiEnhancedCanvas.getContext("2d").drawImage(enhanced, 0, 0);
+
+  if (downloadEnhancedButton) downloadEnhancedButton.disabled = false;
+  if (aiEnhanceStatus) {
+    aiEnhanceStatus.textContent = "Color restoration complete. Compare and download.";
+    aiEnhanceStatus.style.color = "var(--accent)";
+  }
+}
+
+// --- Browser ONNX Segmentation ---
+
+const ONNX_MODEL_URL = "u2netp.onnx";
+const ONNX_INPUT_SIZE = 320;
+
+async function loadOnnxModel() {
+  if (onnxSession) return onnxSession;
+  if (onnxModelLoading) return null;
+  if (typeof ort === "undefined") {
+    if (browserMaskStatus) browserMaskStatus.textContent = "Browser AI: ONNX Runtime not loaded (check internet connection)";
+    return null;
+  }
+  onnxModelLoading = true;
+  if (browserMaskStatus) browserMaskStatus.textContent = "Browser AI: downloading model (~5 MB)...";
+  try {
+    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/";
+    onnxSession = await ort.InferenceSession.create(ONNX_MODEL_URL, {
+      executionProviders: ["wasm"],
+      graphOptimizationLevel: "all"
+    });
+    if (browserMaskStatus) browserMaskStatus.textContent = "Browser AI: model ready";
+    return onnxSession;
+  } catch (error) {
+    console.error("ONNX model load failed:", error);
+    if (browserMaskStatus) browserMaskStatus.textContent = `Browser AI: model load failed — ${error.message}`;
+    return null;
+  } finally {
+    onnxModelLoading = false;
+  }
+}
+
+function preprocessImageForOnnx(sourceCanvas) {
+  const resized = createCanvas(ONNX_INPUT_SIZE, ONNX_INPUT_SIZE);
+  const ctx = resized.getContext("2d");
+  ctx.drawImage(sourceCanvas, 0, 0, ONNX_INPUT_SIZE, ONNX_INPUT_SIZE);
+  const imageData = ctx.getImageData(0, 0, ONNX_INPUT_SIZE, ONNX_INPUT_SIZE);
+  const data = imageData.data;
+  const floats = new Float32Array(3 * ONNX_INPUT_SIZE * ONNX_INPUT_SIZE);
+  const mean = [0.485, 0.456, 0.406];
+  const std = [0.229, 0.224, 0.225];
+  for (let i = 0; i < ONNX_INPUT_SIZE * ONNX_INPUT_SIZE; i++) {
+    floats[i] = (data[i * 4] / 255 - mean[0]) / std[0];
+    floats[ONNX_INPUT_SIZE * ONNX_INPUT_SIZE + i] = (data[i * 4 + 1] / 255 - mean[1]) / std[1];
+    floats[2 * ONNX_INPUT_SIZE * ONNX_INPUT_SIZE + i] = (data[i * 4 + 2] / 255 - mean[2]) / std[2];
+  }
+  return new ort.Tensor("float32", floats, [1, 3, ONNX_INPUT_SIZE, ONNX_INPUT_SIZE]);
+}
+
+function postprocessOnnxOutput(output, targetWidth, targetHeight) {
+  const outputData = output.data;
+  const outputH = output.dims[2];
+  const outputW = output.dims[3];
+
+  // Sigmoid activation
+  const sigmoid = new Float32Array(outputH * outputW);
+  for (let i = 0; i < outputH * outputW; i++) {
+    sigmoid[i] = 1 / (1 + Math.exp(-outputData[i]));
+  }
+
+  // Use a fixed threshold rather than min/max normalization
+  // This avoids the problem where models output uniformly high values
+  // Sigmoid 0.5 = decision boundary; scale [0,1] directly to [0,255]
+  const maskCanvas = createCanvas(outputW, outputH);
+  const maskCtx = maskCanvas.getContext("2d");
+  const maskData = maskCtx.createImageData(outputW, outputH);
+  for (let i = 0; i < outputH * outputW; i++) {
+    const v = Math.round(Math.min(1, Math.max(0, sigmoid[i])) * 255);
+    maskData.data[i * 4] = v;
+    maskData.data[i * 4 + 1] = v;
+    maskData.data[i * 4 + 2] = v;
+    maskData.data[i * 4 + 3] = 255;
+  }
+  maskCtx.putImageData(maskData, 0, 0);
+
+  // Scale to original image size
+  const scaledCanvas = createCanvas(targetWidth, targetHeight);
+  scaledCanvas.getContext("2d").drawImage(maskCanvas, 0, 0, targetWidth, targetHeight);
+  return scaledCanvas;
+}
+
+async function generateBrowserMask() {
+  if (!loadedImage) {
+    if (bgStatus) bgStatus.textContent = "Load a source image first.";
+    return;
+  }
+  if (browserMaskStatus) browserMaskStatus.textContent = "Browser AI: loading model...";
+  if (bgStatus) bgStatus.textContent = "Running browser-side AI segmentation...";
+
+  try {
+    const session = await loadOnnxModel();
+    if (!session) return;
+
+    if (browserMaskStatus) browserMaskStatus.textContent = "Browser AI: running inference...";
+    const sourceCanvas = createCanvas(loadedImage.width, loadedImage.height);
+    sourceCanvas.getContext("2d").drawImage(loadedImage, 0, 0);
+
+    const inputTensor = preprocessImageForOnnx(sourceCanvas);
+    const feeds = {};
+    const inputName = session.inputNames[0];
+    feeds[inputName] = inputTensor;
+
+    const startTime = performance.now();
+    const results = await session.run(feeds);
+    const elapsed = Math.round(performance.now() - startTime);
+
+    // Use the first output (primary segmentation map)
+    const outputName = session.outputNames[0];
+    const outputTensor = results[outputName];
+
+    const maskCanvas = postprocessOnnxOutput(outputTensor, loadedImage.width, loadedImage.height);
+    importedAiMaskAlpha = alphaFromMaskCanvas(maskCanvas);
+
+    // Auto-detect polarity
+    let whiteCount = 0;
+    for (let i = 0; i < importedAiMaskAlpha.length; i++) {
+      if (importedAiMaskAlpha[i] > 128) whiteCount++;
+    }
+    const needsInvert = whiteCount > importedAiMaskAlpha.length * 0.5;
+    if (needsInvert) {
+      for (let i = 0; i < importedAiMaskAlpha.length; i++) {
+        importedAiMaskAlpha[i] = 255 - importedAiMaskAlpha[i];
+      }
+    }
+    if (bgAiInvertMask) bgAiInvertMask.checked = false;
+
+    rebuildImportedAiMaskCanvas();
+    if (bgMode) bgMode.value = "ai";
+    if (bgMaskSource) bgMaskSource.value = "ai";
+    if (bgPreviewTarget) bgPreviewTarget.value = "mask";
+    syncMainPreviewFromLayout();
+    updateActionStates();
+    updateMaskStatusBlock();
+
+    if (browserMaskStatus) browserMaskStatus.textContent = `Browser AI: mask generated (${elapsed}ms${needsInvert ? ", auto-inverted" : ""})`;
+    if (bgStatus) bgStatus.textContent = `Browser AI mask ready (${elapsed}ms, draft quality). Click 'Process Image' to extract.`;
+
+  } catch (error) {
+    console.error("Browser ONNX mask failed:", error);
+    if (browserMaskStatus) browserMaskStatus.textContent = `Browser AI: error — ${error.message}`;
+    if (bgStatus) bgStatus.textContent = `Browser AI mask failed: ${error.message}`;
+  }
+}
+
+async function generateBrowserMaskForImage(image) {
+  const session = await loadOnnxModel();
+  if (!session) throw new Error("ONNX model failed to load");
+  const sourceCanvas = createCanvas(image.width, image.height);
+  sourceCanvas.getContext("2d").drawImage(image, 0, 0);
+  const inputTensor = preprocessImageForOnnx(sourceCanvas);
+  const feeds = {};
+  feeds[session.inputNames[0]] = inputTensor;
+  const results = await session.run(feeds);
+  const outputTensor = results[session.outputNames[0]];
+  const maskCanvas = postprocessOnnxOutput(outputTensor, image.width, image.height);
+  const alpha = alphaFromMaskCanvas(maskCanvas);
+  let whiteCount = 0;
+  for (let i = 0; i < alpha.length; i += 1) {
+    if (alpha[i] > 128) whiteCount += 1;
+  }
+  if (whiteCount > alpha.length * 0.5) {
+    for (let i = 0; i < alpha.length; i += 1) {
+      alpha[i] = 255 - alpha[i];
+    }
+  }
+  return alpha;
+}
+
+async function generateComfyuiMaskForImage(image, modelType) {
+  const uploadCanvas = createCanvas(image.width, image.height);
+  uploadCanvas.getContext("2d").drawImage(image, 0, 0);
+  const blob = await new Promise(resolve => uploadCanvas.toBlob(resolve, "image/png"));
+  const uploadFilename = "asset_editor_batch_" + Date.now() + ".png";
+  await comfyuiUploadImage(blob, uploadFilename);
+  const workflow = buildSegmentationWorkflow(uploadFilename, modelType, getActiveComfyuiConfig());
+  const { promptId } = await comfyuiQueueWorkflow(workflow);
+  const historyEntry = await comfyuiPollForCompletion(promptId);
+  const outputImageInfo = extractOutputImageFilename(historyEntry);
+  const saveResp = await fetch("/save-mask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(outputImageInfo)
+  });
+  if (!saveResp.ok) throw new Error("Failed to save mask locally: " + (await saveResp.text()));
+  const maskImg = new Image();
+  await new Promise((resolve, reject) => {
+    maskImg.onload = resolve;
+    maskImg.onerror = () => reject(new Error("Failed to load local mask file"));
+    maskImg.src = "/_temp_mask.png?t=" + Date.now();
+  });
+  let maskCanvas = createCanvas(maskImg.width, maskImg.height);
+  drawImagePreservingRGB(maskImg, maskCanvas);
+  if (maskCanvas.width !== image.width || maskCanvas.height !== image.height) {
+    const scaled = createCanvas(image.width, image.height);
+    scaled.getContext("2d", { willReadFrequently: true }).drawImage(maskCanvas, 0, 0, image.width, image.height);
+    maskCanvas = scaled;
+  }
+  const alpha = alphaFromMaskCanvas(maskCanvas);
+  let whiteCount = 0;
+  for (let i = 0; i < alpha.length; i += 1) {
+    if (alpha[i] > 128) whiteCount += 1;
+  }
+  if (whiteCount > alpha.length * 0.5) {
+    for (let i = 0; i < alpha.length; i += 1) {
+      alpha[i] = 255 - alpha[i];
+    }
+  }
+  return alpha;
 }
 
 function drawImageOnCanvas(canvas, image) {
@@ -1020,6 +1889,16 @@ function getCanvasPixel(canvas, event) {
   return { x, y, r: data[0], g: data[1], b: data[2] };
 }
 
+function getCanvasCoords(canvas, event) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: Math.max(0, Math.min(canvas.width - 1, Math.floor((event.clientX - rect.left) * scaleX))),
+    y: Math.max(0, Math.min(canvas.height - 1, Math.floor((event.clientY - rect.top) * scaleY)))
+  };
+}
+
 function stopSamplingMode() {
   if (samplingHandler) {
     originalCanvas.removeEventListener("click", samplingHandler);
@@ -1039,13 +1918,13 @@ function stopSamplingMode() {
   samplingModeActive = false;
   samplingTarget = "background";
   activeKeepBox = null;
-  if (sampleBgButton) sampleBgButton.textContent = "Start Sampling Background Points";
-  if (sampleKeepButton) sampleKeepButton.textContent = "Mark UI Keep Point(s)";
-  if (sampleKeepBoxButton) sampleKeepBoxButton.textContent = "Draw UI Keep Box(es)";
-  if (sampleSubtractBoxButton) sampleSubtractBoxButton.textContent = "Draw Scenery Remove Box(es)";
-  if (eraseKeepBoxButton) eraseKeepBoxButton.textContent = "Erase Bad Keep Box(es)";
-  if (brushKeepButton) brushKeepButton.textContent = "Brush Keep Edges";
-  if (brushRemoveButton) brushRemoveButton.textContent = "Brush Remove Junk";
+  if (sampleBgButton) sampleBgButton.textContent = "Sample BG";
+  if (sampleKeepButton) sampleKeepButton.textContent = "Keep Point";
+  if (sampleKeepBoxButton) sampleKeepBoxButton.textContent = "Keep Box";
+  if (sampleSubtractBoxButton) sampleSubtractBoxButton.textContent = "Remove Box";
+  if (eraseKeepBoxButton) eraseKeepBoxButton.textContent = "Erase Keep Box";
+  if (brushKeepButton) brushKeepButton.textContent = "Brush Keep";
+  if (brushRemoveButton) brushRemoveButton.textContent = "Brush Remove";
   originalCanvas.classList.remove("sampling-active");
   renderOriginalPreview();
   updateActionStates();
@@ -1092,18 +1971,18 @@ function startSamplingMode(target) {
       : bgMode.value === "multi"
         ? "Click 3-4 empty background spots in the Original preview, then stop sampling."
         : "Click one background spot in the Original preview.";
-  if (sampleBgButton) sampleBgButton.textContent = bgMode.value === "multi" ? "Stop Sampling Background Points" : "Stop Sampling";
-  if (sampleKeepButton) sampleKeepButton.textContent = target === "keep" ? "Stop Marking UI Keep Points" : "Mark UI Keep Point(s)";
-  if (sampleKeepBoxButton) sampleKeepBoxButton.textContent = target === "keep-box" ? "Stop Drawing UI Keep Box(es)" : "Draw UI Keep Box(es)";
-  if (sampleSubtractBoxButton) sampleSubtractBoxButton.textContent = target === "subtract-box" ? "Stop Drawing Scenery Remove Box(es)" : "Draw Scenery Remove Box(es)";
-  if (eraseKeepBoxButton) eraseKeepBoxButton.textContent = target === "erase-box" ? "Stop Erasing Keep Box(es)" : "Erase Bad Keep Box(es)";
-  if (brushKeepButton) brushKeepButton.textContent = target === "brush-keep" ? "Stop Brushing Keep Edges" : "Brush Keep Edges";
-  if (brushRemoveButton) brushRemoveButton.textContent = target === "brush-remove" ? "Stop Brushing Remove Marks" : "Brush Remove Junk";
+  if (sampleBgButton) sampleBgButton.textContent = target === "background" ? "Stop Sampling" : "Sample BG";
+  if (sampleKeepButton) sampleKeepButton.textContent = target === "keep" ? "Stop Marking" : "Keep Point";
+  if (sampleKeepBoxButton) sampleKeepBoxButton.textContent = target === "keep-box" ? "Stop Drawing" : "Keep Box";
+  if (sampleSubtractBoxButton) sampleSubtractBoxButton.textContent = target === "subtract-box" ? "Stop Drawing" : "Remove Box";
+  if (eraseKeepBoxButton) eraseKeepBoxButton.textContent = target === "erase-box" ? "Stop Erasing" : "Erase Keep Box";
+  if (brushKeepButton) brushKeepButton.textContent = target === "brush-keep" ? "Stop Brushing" : "Brush Keep";
+  if (brushRemoveButton) brushRemoveButton.textContent = target === "brush-remove" ? "Stop Brushing" : "Brush Remove";
   originalCanvas.classList.add("sampling-active");
   samplingModeActive = true;
   if (target === "erase-box") {
     samplingHandler = (event) => {
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       for (let i = manualKeepBoxes.length - 1; i >= 0; i -= 1) {
         const box = normalizeBox(manualKeepBoxes[i]);
         if (sample.x >= box.left && sample.x <= box.right && sample.y >= box.top && sample.y <= box.bottom) {
@@ -1122,20 +2001,20 @@ function startSamplingMode(target) {
   }
   if (target === "keep-box") {
     samplingHandler = (event) => {
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       activeKeepBox = { left: sample.x, top: sample.y, right: sample.x, bottom: sample.y };
       renderOriginalPreview();
     };
     samplingMoveHandler = (event) => {
       if (!activeKeepBox) return;
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       activeKeepBox.right = sample.x;
       activeKeepBox.bottom = sample.y;
       renderOriginalPreview();
     };
     samplingUpHandler = (event) => {
       if (!activeKeepBox) return;
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       activeKeepBox.right = sample.x;
       activeKeepBox.bottom = sample.y;
       const imageData = originalCanvas.getContext("2d").getImageData(0, 0, originalCanvas.width, originalCanvas.height);
@@ -1160,20 +2039,20 @@ function startSamplingMode(target) {
   }
   if (target === "subtract-box") {
     samplingHandler = (event) => {
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       activeKeepBox = { left: sample.x, top: sample.y, right: sample.x, bottom: sample.y };
       renderOriginalPreview();
     };
     samplingMoveHandler = (event) => {
       if (!activeKeepBox) return;
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       activeKeepBox.right = sample.x;
       activeKeepBox.bottom = sample.y;
       renderOriginalPreview();
     };
     samplingUpHandler = (event) => {
       if (!activeKeepBox) return;
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       activeKeepBox.right = sample.x;
       activeKeepBox.bottom = sample.y;
       const box = normalizeBox(activeKeepBox);
@@ -1194,7 +2073,7 @@ function startSamplingMode(target) {
   if (target === "brush-keep") {
     samplingHandler = (event) => {
       startBrushStroke("keep");
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       manualKeepBrushPoints.push({ x: sample.x, y: sample.y, radius: getCurrentBrushRadius() });
       updateSampleMeta();
       renderOriginalPreview();
@@ -1202,7 +2081,7 @@ function startSamplingMode(target) {
     };
     samplingMoveHandler = (event) => {
       if ((event.buttons & 1) !== 1) return;
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       manualKeepBrushPoints.push({ x: sample.x, y: sample.y, radius: getCurrentBrushRadius() });
       updateSampleMeta();
       renderOriginalPreview();
@@ -1221,7 +2100,7 @@ function startSamplingMode(target) {
   if (target === "brush-remove") {
     samplingHandler = (event) => {
       startBrushStroke("remove");
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       manualRemoveBrushPoints.push({ x: sample.x, y: sample.y, radius: getCurrentBrushRadius() });
       updateSampleMeta();
       renderOriginalPreview();
@@ -1229,7 +2108,7 @@ function startSamplingMode(target) {
     };
     samplingMoveHandler = (event) => {
       if ((event.buttons & 1) !== 1) return;
-      const sample = getCanvasPixel(originalCanvas, event);
+      const sample = getCanvasCoords(originalCanvas, event);
       manualRemoveBrushPoints.push({ x: sample.x, y: sample.y, radius: getCurrentBrushRadius() });
       updateSampleMeta();
       renderOriginalPreview();
@@ -1873,7 +2752,7 @@ async function buildFloodFillAlphaData(imageData, settings, backgroundSamples, o
       }
 
       if (minDistanceSq <= edgeBandSq) {
-        alpha[i] = Math.max(alpha[i], 128 + Math.round((Math.sqrt(minDistanceSq) / Math.max(1, edgeBand)) * 127));
+        alpha[i] = 128 + Math.round((Math.sqrt(minDistanceSq) / Math.max(1, edgeBand)) * 127);
       }
     }
     if (onProgress) onProgress(100);
@@ -2023,7 +2902,206 @@ function applyAlphaToImage(imageData, alpha, decontaminate, backgroundSample, al
   return result;
 }
 
+function applySpillSuppression(imageData, alpha, backgroundSamples, strength) {
+  if (!strength || strength <= 0 || !backgroundSamples.length) return;
+  const { width, height, data } = imageData;
+  const total = width * height;
+  const factor = Math.min(1, strength / 100);
+
+  const bgR = backgroundSamples[0].r;
+  const bgG = backgroundSamples[0].g;
+  const bgB = backgroundSamples[0].b;
+
+  for (let i = 0; i < total; i += 1) {
+    const a = alpha[i];
+    if (a === 0 || a === 255) continue;
+    const offset = i * 4;
+    if (data[offset + 3] === 0) continue;
+
+    const alphaRatio = a / 255;
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+
+    // Unpremultiply: recover true foreground color by removing background contribution
+    const cleanR = Math.min(255, Math.max(0, Math.round((r - bgR * (1 - alphaRatio)) / Math.max(0.01, alphaRatio))));
+    const cleanG = Math.min(255, Math.max(0, Math.round((g - bgG * (1 - alphaRatio)) / Math.max(0.01, alphaRatio))));
+    const cleanB = Math.min(255, Math.max(0, Math.round((b - bgB * (1 - alphaRatio)) / Math.max(0.01, alphaRatio))));
+
+    // Channel-limit clamp: prevent background-dominant channel from exceeding average of others
+    const avgClean = (cleanR + cleanG + cleanB) / 3;
+    const bgMax = Math.max(bgR, bgG, bgB);
+    const bgDominantR = bgR === bgMax && bgR > bgG + 20 && bgR > bgB + 20;
+    const bgDominantG = bgG === bgMax && bgG > bgR + 20 && bgG > bgB + 20;
+    const bgDominantB = bgB === bgMax && bgB > bgR + 20 && bgB > bgG + 20;
+
+    let finalR = cleanR;
+    let finalG = cleanG;
+    let finalB = cleanB;
+    if (bgDominantR && cleanR > avgClean * 1.2) finalR = Math.round(Math.min(cleanR, (cleanG + cleanB) / 2));
+    if (bgDominantG && cleanG > avgClean * 1.2) finalG = Math.round(Math.min(cleanG, (cleanR + cleanB) / 2));
+    if (bgDominantB && cleanB > avgClean * 1.2) finalB = Math.round(Math.min(cleanB, (cleanR + cleanG) / 2));
+
+    // Blend by spill strength and how close pixel is to the edge (lower alpha = more spill likely)
+    const edgeWeight = Math.max(0, Math.min(1, (240 - a) / 160));
+    const blend = factor * edgeWeight;
+    data[offset]     = Math.round(r * (1 - blend) + finalR * blend);
+    data[offset + 1] = Math.round(g * (1 - blend) + finalG * blend);
+    data[offset + 2] = Math.round(b * (1 - blend) + finalB * blend);
+  }
+}
+
+function computeEdgeStrengthMap(imageData) {
+  const { width, height, data } = imageData;
+  const strength = new Uint8ClampedArray(width * height);
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const idx = (y * width + x) * 4;
+      const lIdx = idx - 4;
+      const rIdx = idx + 4;
+      const tIdx = idx - width * 4;
+      const bIdx = idx + width * 4;
+      let gx = 0;
+      let gy = 0;
+      for (let c = 0; c < 3; c += 1) {
+        gx += Math.abs(data[rIdx + c] - data[lIdx + c]);
+        gy += Math.abs(data[bIdx + c] - data[tIdx + c]);
+      }
+      strength[y * width + x] = Math.min(255, Math.round(Math.sqrt(gx * gx + gy * gy)));
+    }
+  }
+  return strength;
+}
+
+function dilateEdgeMap(strength, width, height, radius) {
+  const dilated = new Uint8ClampedArray(strength.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let maxVal = strength[y * width + x];
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          if (dx * dx + dy * dy > radius * radius) continue;
+          const val = strength[ny * width + nx];
+          if (val > maxVal) maxVal = val;
+        }
+      }
+      dilated[y * width + x] = maxVal;
+    }
+  }
+  return dilated;
+}
+
+function applyEdgeProtectionToAlpha(alpha, edgeStrength, width, height, minEdge, maxEdge, boundaryRadius) {
+  // Build a boundary map: pixels within boundaryRadius of a foreground pixel (alpha >= 200)
+  const total = width * height;
+  const nearForeground = new Uint8Array(total);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = y * width + x;
+      if (alpha[i] < 200) continue;
+      // Mark all neighbors within radius as near-foreground
+      for (let dy = -boundaryRadius; dy <= boundaryRadius; dy += 1) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -boundaryRadius; dx <= boundaryRadius; dx += 1) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          nearForeground[ny * width + nx] = 1;
+        }
+      }
+    }
+  }
+
+  const protected_ = new Uint8ClampedArray(alpha);
+  const range = Math.max(1, maxEdge - minEdge);
+  for (let i = 0; i < total; i += 1) {
+    if (alpha[i] >= 255) continue;
+    // Only protect pixels near the AI foreground boundary
+    if (!nearForeground[i]) continue;
+    const raw = edgeStrength[i];
+    if (raw <= minEdge) continue;
+    const edgeAlpha = Math.round(Math.min(1, (raw - minEdge) / range) * 255);
+    if (edgeAlpha > protected_[i]) {
+      protected_[i] = edgeAlpha;
+    }
+  }
+  return protected_;
+}
+
+function buildLocalBackgroundColors(imageData, alpha, width, height, radius) {
+  const { data } = imageData;
+  const total = width * height;
+  const localBg = new Float32Array(total * 3);
+  for (let i = 0; i < total; i += 1) {
+    const a = alpha[i];
+    if (a === 0 || a === 255) continue;
+    const x = i % width;
+    const y = Math.floor(i / width);
+    let sumR = 0, sumG = 0, sumB = 0, count = 0;
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      const ny = y + dy;
+      if (ny < 0 || ny >= height) continue;
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        const nx = x + dx;
+        if (nx < 0 || nx >= width) continue;
+        const ni = ny * width + nx;
+        if (alpha[ni] !== 0) continue;
+        const offset = ni * 4;
+        sumR += data[offset];
+        sumG += data[offset + 1];
+        sumB += data[offset + 2];
+        count += 1;
+      }
+    }
+    if (count > 0) {
+      localBg[i * 3] = sumR / count;
+      localBg[i * 3 + 1] = sumG / count;
+      localBg[i * 3 + 2] = sumB / count;
+    } else {
+      localBg[i * 3] = -1;
+    }
+  }
+  return localBg;
+}
+
+function applyLocalSpillSuppression(imageData, alpha, localBg, width, height) {
+  const { data } = imageData;
+  const total = width * height;
+  for (let i = 0; i < total; i += 1) {
+    const a = alpha[i];
+    if (a === 0 || a === 255) continue;
+    if (localBg[i * 3] < 0) continue;
+    const offset = i * 4;
+    if (data[offset + 3] === 0) continue;
+    const bgR = localBg[i * 3];
+    const bgG = localBg[i * 3 + 1];
+    const bgB = localBg[i * 3 + 2];
+    const alphaRatio = Math.max(0.01, a / 255);
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+    const cleanR = Math.min(255, Math.max(0, Math.round((r - bgR * (1 - alphaRatio)) / alphaRatio)));
+    const cleanG = Math.min(255, Math.max(0, Math.round((g - bgG * (1 - alphaRatio)) / alphaRatio)));
+    const cleanB = Math.min(255, Math.max(0, Math.round((b - bgB * (1 - alphaRatio)) / alphaRatio)));
+    const edgeWeight = Math.max(0, Math.min(1, (240 - a) / 160));
+    data[offset]     = Math.round(r * (1 - edgeWeight) + cleanR * edgeWeight);
+    data[offset + 1] = Math.round(g * (1 - edgeWeight) + cleanG * edgeWeight);
+    data[offset + 2] = Math.round(b * (1 - edgeWeight) + cleanB * edgeWeight);
+  }
+}
+
 function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, settings, backgroundSamples) {
+  // AI mode: apply edge protection + local spill cleanup
+  if (settings.mode === "remove" && settings.decontaminate && importedAiMaskAlpha) {
+    const edgeStrength = computeEdgeStrengthMap(sourceData);
+    const dilatedEdges = dilateEdgeMap(edgeStrength, sourceCanvas.width, sourceCanvas.height, 3);
+    alpha = applyEdgeProtectionToAlpha(alpha, dilatedEdges, sourceCanvas.width, sourceCanvas.height, 30, 120, 6);
+  }
+
   const resultData = applyAlphaToImage(
     sourceData,
     alpha,
@@ -2032,6 +3110,16 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
     settings.componentAlpha,
     settings.preserveColor
   );
+
+  // AI mode: apply local background-aware spill suppression
+  if (settings.decontaminate && importedAiMaskAlpha) {
+    const localBg = buildLocalBackgroundColors(sourceData, alpha, sourceCanvas.width, sourceCanvas.height, 4);
+    applyLocalSpillSuppression(resultData, alpha, localBg, sourceCanvas.width, sourceCanvas.height);
+  }
+
+  if (settings.aiSpill > 0 && backgroundSamples.length) {
+    applySpillSuppression(resultData, alpha, backgroundSamples, settings.aiSpill);
+  }
   if (settings.decontaminate) {
     const cleanupPasses = settings.edgeCleanupStrength >= 80
       ? 3
@@ -2849,7 +3937,7 @@ function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
     for (let x = 0; x < width; x += 1) {
       const startIndex = y * width + x;
       if (seen[startIndex] || alpha[startIndex] < alphaThreshold) continue;
-      const queue = [[x, y]];
+      const queue = [startIndex];
       seen[startIndex] = 1;
       let head = 0;
       let count = 0;
@@ -2862,7 +3950,9 @@ function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
       let touchesRight = false;
       let touchesBottom = false;
       while (head < queue.length) {
-        const [cx, cy] = queue[head++];
+        const ci = queue[head++];
+        const cx = ci % width;
+        const cy = (ci - cx) / width;
         count += 1;
         minX = Math.min(minX, cx);
         minY = Math.min(minY, cy);
@@ -2872,14 +3962,10 @@ function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
         if (cy === 0) touchesTop = true;
         if (cx === width - 1) touchesRight = true;
         if (cy === height - 1) touchesBottom = true;
-        const neighbors = [[cx - 1, cy], [cx + 1, cy], [cx, cy - 1], [cx, cy + 1]];
-        for (const [nx, ny] of neighbors) {
-          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-          const index = ny * width + nx;
-          if (seen[index] || alpha[index] < alphaThreshold) continue;
-          seen[index] = 1;
-          queue.push([nx, ny]);
-        }
+        if (cx > 0)           { const ni = ci - 1;     if (!seen[ni] && alpha[ni] >= alphaThreshold) { seen[ni] = 1; queue.push(ni); } }
+        if (cx < width - 1)   { const ni = ci + 1;     if (!seen[ni] && alpha[ni] >= alphaThreshold) { seen[ni] = 1; queue.push(ni); } }
+        if (cy > 0)           { const ni = ci - width;  if (!seen[ni] && alpha[ni] >= alphaThreshold) { seen[ni] = 1; queue.push(ni); } }
+        if (cy < height - 1)  { const ni = ci + width;  if (!seen[ni] && alpha[ni] >= alphaThreshold) { seen[ni] = 1; queue.push(ni); } }
       }
       if (count >= minPixels) {
         const boxWidth = maxX - minX + 1;
@@ -2940,9 +4026,7 @@ function filterComponentBoxes(boxes, width, height, keepSamples = [], keepBoxes 
       keepPointInside ||
       keepBoxInside ||
       keepBrushInside ||
-      !probablySceneFragment &&
-      isDenseEnough &&
-      (isHorizontalBar || isVerticalBar || isPanelLike);
+      (!probablySceneFragment && isDenseEnough && (isHorizontalBar || isVerticalBar || isPanelLike));
 
     if (keep) accepted.push(box);
     else rejected.push(box);
@@ -2974,6 +4058,172 @@ async function processBackgroundRemoval(sourceCanvas, sourceData, settings, back
   }
   return buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, settings, backgroundSamples);
 }
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Failed to load " + file.name)); };
+    img.src = url;
+  });
+}
+
+function toggleBatchMode(active) {
+  batchModeActive = active;
+  if (singleFileField) singleFileField.style.display = active ? "none" : "";
+  if (batchFileField) batchFileField.style.display = active ? "" : "none";
+  if (batchFileCount) batchFileCount.style.display = active ? "" : "none";
+  if (batchAiSourceField) batchAiSourceField.style.display = active ? "" : "none";
+  if (batchProgressBlock) batchProgressBlock.style.display = "none";
+  if (!active) {
+    batchFiles = [];
+    batchResults = [];
+    if (batchFileCount) batchFileCount.textContent = "No files selected.";
+    if (batchInputFiles) batchInputFiles.value = "";
+  }
+  const multiOption = bgMode ? bgMode.querySelector('option[value="multi"]') : null;
+  if (multiOption) multiOption.disabled = active;
+  if (active && bgMode && bgMode.value === "multi") bgMode.value = "remove";
+  updateActionStates();
+}
+
+async function processBatchImages() {
+  if (!batchFiles.length) {
+    if (bgStatus) bgStatus.textContent = "No batch files selected.";
+    return;
+  }
+
+  const aiSource = batchAiSource ? batchAiSource.value : "browser";
+  const modelType = comfyuiModel ? comfyuiModel.value : "BiRefNet-general";
+
+  if (aiSource === "comfyui") {
+    const connected = await testComfyuiConnection();
+    if (!connected) {
+      if (bgStatus) bgStatus.textContent = "ComfyUI connection failed. Check the server or switch to another mode.";
+      return;
+    }
+  }
+
+  const settings = getBgSettings();
+  settings.manualBackgroundColor = null;
+  settings.manualBackgroundSamples = [];
+  settings.manualKeepSamples = [];
+  settings.manualKeepBoxes = [];
+  settings.manualSubtractBoxes = [];
+  settings.manualKeepBrushPoints = [];
+  settings.manualRemoveBrushPoints = [];
+
+  batchProcessing = true;
+  batchCancelRequested = false;
+  cancelProcessingRequested = false;
+  batchResults = [];
+  if (batchProgressBlock) batchProgressBlock.style.display = "";
+  if (batchProgressBar) batchProgressBar.style.width = "0%";
+  setProcessingState(true, "Starting batch...");
+
+  const total = batchFiles.length;
+
+  for (let i = 0; i < total; i += 1) {
+    if (batchCancelRequested || cancelProcessingRequested) {
+      if (bgStatus) bgStatus.textContent = `Batch canceled after ${i} of ${total} images.`;
+      break;
+    }
+
+    const file = batchFiles[i];
+    const fileName = file.name.replace(/\.[^.]+$/, "");
+    const progressPct = Math.round((i / total) * 100);
+    if (batchProgressBar) batchProgressBar.style.width = progressPct + "%";
+    if (batchProgressLabel) batchProgressLabel.textContent = `Batch: ${i + 1} / ${total}`;
+    if (batchCurrentFile) batchCurrentFile.textContent = file.name;
+
+    try {
+      // Load image
+      const image = await loadImageFromFile(file);
+      loadedImage = image;
+
+      const sourceCanvas = createCanvas(image.width, image.height);
+      sourceCanvas.getContext("2d").drawImage(image, 0, 0);
+      const sourceData = sourceCanvas.getContext("2d").getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const backgroundSamples = [sampleBackgroundColor(sourceData, settings.tone)];
+      let processed;
+
+      if (aiSource === "direct") {
+        // Direct background removal — no AI mask
+        if (bgStatus) bgStatus.textContent = `Batch ${i + 1}/${total}: removing background — ${file.name}...`;
+        setProcessingState(true, `Batch ${i + 1}/${total}: removing BG — ${file.name}`);
+
+        processed = settings.mode === "crop"
+          ? processObjectCrop(sourceCanvas, sourceData, settings, backgroundSamples[0])
+          : await processBackgroundRemoval(sourceCanvas, sourceData, settings, backgroundSamples, (percent) => {
+              if (bgStatus) bgStatus.textContent = `Batch ${i + 1}/${total}: ${file.name} — ${percent}%`;
+              setProcessingState(true, `Batch ${i + 1}/${total}: ${file.name} — ${percent}%`);
+            });
+      } else {
+        // Two-pass: AI mask then background removal
+        // Pass 1: Generate AI mask
+        if (bgStatus) bgStatus.textContent = `Batch ${i + 1}/${total}: generating AI mask for ${file.name}...`;
+        setProcessingState(true, `Batch ${i + 1}/${total}: AI mask — ${file.name}`);
+
+        let maskAlpha;
+        if (aiSource === "comfyui") {
+          maskAlpha = await generateComfyuiMaskForImage(image, modelType);
+        } else {
+          maskAlpha = await generateBrowserMaskForImage(image);
+        }
+
+        if (batchCancelRequested || cancelProcessingRequested) {
+          if (bgStatus) bgStatus.textContent = `Batch canceled after ${i} of ${total} images.`;
+          break;
+        }
+
+        // Pass 2: Background removal using the AI mask
+        if (bgStatus) bgStatus.textContent = `Batch ${i + 1}/${total}: extracting ${file.name}...`;
+        setProcessingState(true, `Batch ${i + 1}/${total}: extracting — ${file.name}`);
+
+        importedAiMaskAlpha = maskAlpha;
+        const aiSettings = { ...settings, mode: "ai", maskSource: "ai" };
+        const refinedAlpha = refineImportedAiMaskAlpha(importedAiMaskAlpha, image.width, image.height, aiSettings);
+
+        processed = buildProcessedBackgroundFromAlpha(
+          sourceCanvas,
+          sourceData,
+          refinedAlpha,
+          { ...aiSettings, mode: "remove", decontaminate: true },
+          backgroundSamples
+        );
+      }
+
+      batchResults.push({ fileName, canvas: processed.layoutCanvas || processed.canvas });
+      downloadCanvas(processed.layoutCanvas || processed.canvas, `${fileName}_extracted.png`);
+
+      drawImageOnCanvas(resultCanvas, processed.layoutCanvas || processed.canvas);
+      if (resultMeta) resultMeta.textContent = `Batch ${i + 1}/${total}: ${fileName}`;
+
+      // Reset per-image mask state
+      importedAiMaskAlpha = null;
+      aiMaskCanvas = null;
+
+      await new Promise(r => setTimeout(r, 50));
+    } catch (err) {
+      console.error(`Batch error on ${file.name}:`, err);
+      if (bgStatus) bgStatus.textContent = `Error on ${file.name}: ${err.message}. Continuing...`;
+      importedAiMaskAlpha = null;
+      aiMaskCanvas = null;
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  if (batchProgressBar) batchProgressBar.style.width = "100%";
+  if (batchProgressLabel) batchProgressLabel.textContent = `Batch: ${batchResults.length} / ${total} complete`;
+  if (batchCurrentFile) batchCurrentFile.textContent = "";
+  if (!batchCancelRequested && !cancelProcessingRequested) {
+    if (bgStatus) bgStatus.textContent = `Batch complete. ${batchResults.length} of ${total} images processed and downloaded.`;
+  }
+  batchProcessing = false;
+  cancelProcessingRequested = false;
+  setProcessingState(false);
+}
+
 function downloadCanvas(canvas, fileName) {
   canvas.toBlob((blob) => {
     if (!blob) return;
@@ -3179,6 +4429,10 @@ async function processBackgroundImage() {
           : `${processed.status} AI auto mask is currently using the heuristic preview path until a local segmentation model is connected.`
       : processed.status;
     updateMaskStatusBlock();
+    // Show AI Enhance block after AI mode processing
+    if (settings.mode === "ai" && importedAiMaskAlpha) {
+      showAiEnhanceBlock();
+    }
   } catch (error) {
     if ((error.message || "") === "Processing canceled.") {
       bgStatus.textContent = "Processing canceled.";
@@ -3259,7 +4513,7 @@ downloadJsonButton.addEventListener("click", () => {
 
 loadDemoButton.addEventListener("click", () => {
   form.workflowType.value = "combined";
-  form.style.value = "fantasy";
+  form.artStyle.value = "fantasy";
   form.checkpoint.value = "juggernautXL";
   form.remover.value = "essentials";
   form.assetType.value = "ornate inventory button";
@@ -3270,7 +4524,19 @@ loadDemoButton.addEventListener("click", () => {
 });
 
 bgPreset.addEventListener("change", () => applyPreset(bgPreset.value));
-[bgThreshold, bgSoftness, bgAlphaFloor, bgAlphaCeiling, bgEdgeCleanupStrength, bgComponentAlpha, bgComponentPixels, bgComponentPad, bgObjectPad].forEach((input) => input.addEventListener("input", updateRangeLabels));
+// Auto-switch to matching balanced preset when tone changes
+bgTone.addEventListener("change", () => {
+  const tone = bgTone.value;
+  const currentPreset = bgPreset.value;
+  if (tone === "dark" && currentPreset.startsWith("light-")) {
+    bgPreset.value = currentPreset.replace("light-", "dark-");
+    applyPreset(bgPreset.value);
+  } else if (tone === "light" && currentPreset.startsWith("dark-")) {
+    bgPreset.value = currentPreset.replace("dark-", "light-");
+    applyPreset(bgPreset.value);
+  }
+});
+[bgThreshold, bgSoftness, bgAlphaFloor, bgAlphaCeiling, bgEdgeCleanupStrength, bgComponentAlpha, bgComponentPixels, bgComponentPad, bgObjectPad].forEach((input) => { if (input) input.addEventListener("input", updateRangeLabels); });
 [bgAiConfidence, bgAiMatte, bgAiSpill].forEach((input) => {
   if (input) input.addEventListener("input", updateRangeLabels);
 });
@@ -3295,14 +4561,14 @@ bgLayout.addEventListener("change", () => {
     renderSplitLinks();
   }
 });
-  if (bgMaskSource) {
-    bgMaskSource.addEventListener("change", () => {
-      if (processedLayoutCanvas || processedMaskCanvas || manualMaskCanvas || aiMaskCanvas) {
-        syncMainPreviewFromLayout();
-      }
-      updateMaskStatusBlock();
-    });
-  }
+if (bgMaskSource) {
+  bgMaskSource.addEventListener("change", () => {
+    if (processedLayoutCanvas || processedMaskCanvas || manualMaskCanvas || aiMaskCanvas) {
+      syncMainPreviewFromLayout();
+    }
+    updateMaskStatusBlock();
+  });
+}
 if (bgPreviewTarget) {
   bgPreviewTarget.addEventListener("change", () => {
     if (processedLayoutCanvas || processedMaskCanvas || manualMaskCanvas || aiMaskCanvas) {
@@ -3338,7 +4604,27 @@ bgMode.addEventListener("change", () => {
 });
 
 bgInputFile.addEventListener("change", handleFileInput);
-processBgButton.addEventListener("click", processBackgroundImage);
+if (batchModeToggle) {
+  batchModeToggle.addEventListener("change", () => toggleBatchMode(batchModeToggle.checked));
+}
+if (batchInputFiles) {
+  batchInputFiles.addEventListener("change", (event) => {
+    batchFiles = Array.from(event.target.files || []);
+    if (batchFileCount) {
+      batchFileCount.textContent = batchFiles.length
+        ? `${batchFiles.length} image${batchFiles.length === 1 ? "" : "s"} selected.`
+        : "No files selected.";
+    }
+    updateActionStates();
+  });
+}
+processBgButton.addEventListener("click", () => {
+  if (batchModeActive) {
+    processBatchImages();
+  } else {
+    processBackgroundImage();
+  }
+});
 if (bgEditorView) {
   bgEditorView.addEventListener("change", updateEditorLayout);
 }
@@ -3356,6 +4642,12 @@ if (bgMaskOverlay) {
 }
 if (cancelBgButton) {
   cancelBgButton.addEventListener("click", () => {
+    if (batchProcessing) {
+      batchCancelRequested = true;
+      cancelProcessingRequested = true;
+      bgStatus.textContent = "Batch cancel requested. Finishing current image...";
+      return;
+    }
     if (!isProcessing) {
       bgStatus.textContent = "Nothing is currently processing.";
       return;
@@ -3398,7 +4690,8 @@ if (clearSubtractBoxesButton) {
 if (clearBrushKeepButton) {
   clearBrushKeepButton.addEventListener("click", () => {
     manualKeepBrushPoints = [];
-    clearBrushHistory();
+    brushEditHistory = brushEditHistory.filter(entry => entry.kind !== "keep");
+    activeBrushStroke = null;
     updateSampleMeta();
     renderOriginalPreview();
     updateActionStates();
@@ -3408,7 +4701,8 @@ if (clearBrushKeepButton) {
 if (clearBrushRemoveButton) {
   clearBrushRemoveButton.addEventListener("click", () => {
     manualRemoveBrushPoints = [];
-    clearBrushHistory();
+    brushEditHistory = brushEditHistory.filter(entry => entry.kind !== "remove");
+    activeBrushStroke = null;
     updateSampleMeta();
     renderOriginalPreview();
     updateActionStates();
@@ -3495,6 +4789,31 @@ if (downloadMaskButton) {
 if (aiMaskInput) {
   aiMaskInput.addEventListener("change", handleAiMaskInput);
 }
+if (comfyuiConnectButton) {
+  comfyuiConnectButton.addEventListener("click", testComfyuiConnection);
+}
+if (comfyuiGenerateMaskButton) {
+  comfyuiGenerateMaskButton.addEventListener("click", generateComfyuiMask);
+}
+if (browserMaskButton) {
+  browserMaskButton.addEventListener("click", generateBrowserMask);
+}
+if (aiRemoveButton) {
+  aiRemoveButton.addEventListener("click", aiRemoveWorkflow);
+}
+if (aiEnhanceButton) {
+  aiEnhanceButton.addEventListener("click", runAiEnhance);
+}
+if (downloadFinalButton) {
+  downloadFinalButton.addEventListener("click", () => {
+    if (lastFinalCanvas) downloadCanvas(lastFinalCanvas, `${loadedFileName}_final.png`);
+  });
+}
+if (downloadEnhancedButton) {
+  downloadEnhancedButton.addEventListener("click", () => {
+    if (lastEnhancedCanvas) downloadCanvas(lastEnhancedCanvas, `${loadedFileName}_enhanced.png`);
+  });
+}
 
 downloadPanelsButton.addEventListener("click", async () => {
   if (!processedPanels.length) {
@@ -3514,7 +4833,10 @@ renderSplitLinks();
 updateRangeLabels();
 updateSampleMeta();
 setProcessingState(false);
-bgStatus.textContent = getIdleGuidanceMessage();
+bgStatus.textContent = "Upload an image, select background tone, then click AI Remove.";
+
+// Auto-connect to ComfyUI on page load (silent)
+testComfyuiConnection().catch(() => {});
 updateActionStates();
 updateSplitFilterButtons();
 updateSplitPanelThresholdLabel();
