@@ -53,7 +53,14 @@ class PlaywrightPool:
         for _ in range(self._size):
             context = self._browser.new_context(viewport={"width": 1600, "height": 1200})
             page = context.new_page()
-            page.goto(self._app_url, wait_until="networkidle")
+            for attempt in range(10):
+                try:
+                    page.goto(self._app_url, wait_until="networkidle")
+                    break
+                except Exception:
+                    if attempt == 9:
+                        raise
+                    import time; time.sleep(1)
             page.wait_for_timeout(1000)
             self._pages.append(page)
             self._page_pool.put(page)
