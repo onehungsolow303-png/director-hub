@@ -1,7 +1,7 @@
 """Split endpoint: POST /api/split"""
 import os
 
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from api.utils import PROJECT_DIR, resolve_path, resolve_output_dir
 
 
 def register(router):
@@ -19,7 +19,7 @@ def register(router):
                 return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
             try:
                 pool.reset_page(page)
-                abs_image = os.path.join(PROJECT_DIR, image) if not os.path.isabs(image) else image
+                abs_image = resolve_path(image)
                 router.bridge.load_image(page, abs_image)
                 router.bridge.apply_settings_override(page, {
                     "componentPixels": min_pixels,
@@ -27,8 +27,7 @@ def register(router):
                 })
                 router.bridge.run_process_image(page, timeout_s=30)
                 output_dir = params.get("output_dir", "output")
-                abs_output = os.path.join(PROJECT_DIR, output_dir) if not os.path.isabs(output_dir) else output_dir
-                os.makedirs(abs_output, exist_ok=True)
+                abs_output = resolve_output_dir(output_dir)
                 base = os.path.splitext(os.path.basename(image))[0]
                 panels = router.bridge.extract_panels(page, abs_output, base)
                 return 200, {"panels": panels}

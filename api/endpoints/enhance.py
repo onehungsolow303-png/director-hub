@@ -2,7 +2,7 @@
 import base64
 import os
 
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from api.utils import PROJECT_DIR, resolve_path, resolve_output_dir
 
 
 def register(router):
@@ -19,8 +19,8 @@ def register(router):
                 return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
             try:
                 pool.reset_page(page)
-                abs_original = os.path.join(PROJECT_DIR, original) if not os.path.isabs(original) else original
-                abs_extracted = os.path.join(PROJECT_DIR, extracted) if not os.path.isabs(extracted) else extracted
+                abs_original = resolve_path(original)
+                abs_extracted = resolve_path(extracted)
                 router.bridge.load_image(page, abs_original)
                 with open(abs_extracted, "rb") as f:
                     data = base64.b64encode(f.read()).decode()
@@ -42,8 +42,7 @@ def register(router):
                 if not result.get("ok"):
                     return 500, {"error": "AI Enhance failed", "code": "ENHANCE_FAILED"}
                 output_dir = params.get("output_dir", "output")
-                abs_output = os.path.join(PROJECT_DIR, output_dir) if not os.path.isabs(output_dir) else output_dir
-                os.makedirs(abs_output, exist_ok=True)
+                abs_output = resolve_output_dir(output_dir)
                 base = os.path.splitext(os.path.basename(abs_extracted))[0]
                 out_path = os.path.join(abs_output, f"{base}_enhanced.png")
                 router.bridge.save_canvas_to_file(page, "aiEnhancedCanvas", out_path)
@@ -52,7 +51,7 @@ def register(router):
                 pool.checkin(page)
 
         try:
-            return router.pool.run_on_page(_do_enhance, timeout=30)
+            return router.pool.run_on_page(_do_enhance, timeout=90)
         except Exception as e:
             return 500, {"error": str(e), "code": "INTERNAL_ERROR"}
 

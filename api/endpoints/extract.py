@@ -3,7 +3,7 @@
 import os
 import threading
 
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from api.utils import PROJECT_DIR, resolve_path, resolve_output_dir
 
 
 def register(router):
@@ -20,7 +20,7 @@ def _handle_extract(router):
             return 400, {"error": "Missing required field: image", "code": "NO_IMAGE"}
         preset = params.get("preset", "dark-balanced")
         mode = params.get("mode", "ai-remove")
-        output_dir = params.get("output_dir", os.path.join(PROJECT_DIR, "output"))
+        output_dir = params.get("output_dir", "output")
         settings_override = params.get("settings_override", {})
 
         job_id = router.jobs.create("extract", {
@@ -45,7 +45,7 @@ def _handle_batch(router):
         preset = params.get("preset", "dark-balanced")
         mode = params.get("mode", "ai-remove")
         ai_source = params.get("ai_source", "comfyui")
-        output_dir = params.get("output_dir", os.path.join(PROJECT_DIR, "output", "batch"))
+        output_dir = params.get("output_dir", os.path.join("output", "batch"))
 
         job_id = router.jobs.create("batch", {
             "images": images, "preset": preset, "mode": mode,
@@ -83,14 +83,6 @@ def _handle_status(router):
     return _handler
 
 
-def _resolve_image_path(image):
-    if image.startswith("data:"):
-        return image
-    if os.path.isabs(image):
-        return image
-    return os.path.join(PROJECT_DIR, image)
-
-
 def _run_extract_job(router, job_id, image, preset, mode, output_dir, settings_override):
     """Run extraction via pool.run_on_page() — all Playwright ops on pool thread."""
     router.jobs.update(job_id, status="processing", progress=0.1, step="Queued for browser worker...")
@@ -104,7 +96,7 @@ def _run_extract_job(router, job_id, image, preset, mode, output_dir, settings_o
             pool.reset_page(page)
             router.jobs.update(job_id, progress=0.15, step="Loading image...")
 
-            image_path = _resolve_image_path(image)
+            image_path = resolve_path(image)
             if image_path.startswith("data:"):
                 load_result = router.bridge.load_image_base64(page, image_path)
             else:
@@ -118,14 +110,13 @@ def _run_extract_job(router, job_id, image, preset, mode, output_dir, settings_o
             if settings_override:
                 router.bridge.apply_settings_override(page, settings_override)
 
-            abs_output = os.path.join(PROJECT_DIR, output_dir) if not os.path.isabs(output_dir) else output_dir
-            os.makedirs(abs_output, exist_ok=True)
+            abs_output = resolve_output_dir(output_dir)
             base_name = os.path.splitext(os.path.basename(image if not image.startswith("data:") else "api_input.png"))[0]
 
             if mode == "ai-remove":
                 router.jobs.update(job_id, progress=0.25, step="Running AI Remove...")
                 result = router.bridge.run_ai_remove(page,
-                    on_progress=lambda pct, step: router.jobs.update(job_id, progress=0.2 + pct * 0.6, step=step))
+                    on_progress=lambda step: router.jobs.update(job_id, progress=0.5, step=step))
             elif mode == "crop":
                 page.evaluate("() => { document.querySelector('#bgMode').value = 'crop'; document.querySelector('#bgMode').dispatchEvent(new Event('change')); }")
                 result = router.bridge.run_process_image(page)
@@ -164,8 +155,7 @@ def _run_batch_job(router, job_id, images, preset, mode, ai_source, output_dir):
             router.jobs.update(job_id, status="failed", error="All browser workers busy", code="POOL_EXHAUSTED")
             return
         try:
-            abs_output = os.path.join(PROJECT_DIR, output_dir) if not os.path.isabs(output_dir) else output_dir
-            os.makedirs(abs_output, exist_ok=True)
+            abs_output = resolve_output_dir(output_dir)
             completed = []
             per_image_results = {}
             total = len(images)
@@ -175,8 +165,11 @@ def _run_batch_job(router, job_id, images, preset, mode, ai_source, output_dir):
                 pct = idx / total
                 router.jobs.update(job_id, progress=pct, step=f"Processing {idx+1}/{total}: {os.path.basename(img)}")
                 try:
-                    image_path = _resolve_image_path(img)
-                    load_result = router.bridge.load_image(page, image_path)
+                    image_path = resolve_path(img)
+                    if image_path.startswith("data:"):
+                        load_result = router.bridge.load_image_base64(page, image_path)
+                    else:
+                        load_result = router.bridge.load_image(page, image_path)
                     if not load_result.get("loaded"):
                         per_image_results[img] = {"error": "Failed to load"}
                         continue
