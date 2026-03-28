@@ -1,4 +1,3 @@
-# api/endpoints/split.py
 """Split endpoint: POST /api/split"""
 import os
 
@@ -8,56 +7,37 @@ PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__
 def register(router):
 
     def handle_split(params):
-        image_path = params.get("image_path")
-        output_dir = params.get("output_dir")
-        base_name = params.get("base_name", "panel")
-        settings = params.get("settings", {})
+        image = params.get("image") or params.get("image_path")
+        if not image:
+            return 400, {"error": "Missing required field: image", "code": "NO_IMAGE"}
+        min_pixels = params.get("min_pixels", 5000)
+        alpha_cutoff = params.get("alpha_cutoff", 220)
 
-        if not image_path:
-            return 400, {"error": "Missing required field: image_path", "code": "BAD_REQUEST"}
-        if not output_dir:
-            return 400, {"error": "Missing required field: output_dir", "code": "BAD_REQUEST"}
-
-        # Resolve relative paths against PROJECT_DIR
-        if not os.path.isabs(image_path):
-            image_path = os.path.join(PROJECT_DIR, image_path)
-        if not os.path.isabs(output_dir):
-            output_dir = os.path.join(PROJECT_DIR, output_dir)
-
-        page = router.pool.checkout(timeout=10)
-        if page is None:
-            return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
+        def _do_split(pool):
+            page = pool.checkout(timeout=10)
+            if page is None:
+                return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
+            try:
+                pool.reset_page(page)
+                abs_image = os.path.join(PROJECT_DIR, image) if not os.path.isabs(image) else image
+                router.bridge.load_image(page, abs_image)
+                router.bridge.apply_settings_override(page, {
+                    "componentPixels": min_pixels,
+                    "componentAlpha": alpha_cutoff
+                })
+                router.bridge.run_process_image(page, timeout_s=30)
+                output_dir = params.get("output_dir", "output")
+                abs_output = os.path.join(PROJECT_DIR, output_dir) if not os.path.isabs(output_dir) else output_dir
+                os.makedirs(abs_output, exist_ok=True)
+                base = os.path.splitext(os.path.basename(image))[0]
+                panels = router.bridge.extract_panels(page, abs_output, base)
+                return 200, {"panels": panels}
+            finally:
+                pool.checkin(page)
 
         try:
-            router.pool.reset_page(page)
-
-            # Load image
-            load_result = router.bridge.load_image(page, image_path)
-            if not load_result.get("loaded"):
-                return 500, {"error": "Image failed to load", "code": "LOAD_FAILED"}
-
-            # Apply component/split-related settings (componentPixels, componentAlpha, etc.)
-            if settings:
-                router.bridge.apply_settings_override(page, settings)
-
-            # Run process image to populate processedPanels
-            process_result = router.bridge.run_process_image(page)
-            if not process_result.get("ok"):
-                return 500, {"error": process_result.get("error", "Processing failed"),
-                             "code": "PROCESS_FAILED",
-                             "status": process_result.get("status", "")}
-
-            # Extract panels to output_dir
-            panels_result = router.bridge.extract_panels(page, output_dir, base_name)
-
-            return 200, {
-                "ok": True,
-                "count": panels_result.get("count", 0),
-                "panels": panels_result.get("panels", []),
-                "status": process_result.get("status", ""),
-            }
-
-        finally:
-            router.pool.checkin(page)
+            return router.pool.run_on_page(_do_split, timeout=60)
+        except Exception as e:
+            return 500, {"error": str(e), "code": "INTERNAL_ERROR"}
 
     router.register_post("/api/split", handle_split)

@@ -1,7 +1,7 @@
-# api/endpoints/mask.py
 """Mask endpoints: POST /api/mask/generate, POST /api/mask/refine"""
 import os
 import threading
+import base64
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -9,181 +9,108 @@ PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__
 def register(router):
 
     def handle_generate(params):
-        image_path = params.get("image_path")
-        output_path = params.get("output_path")
-        model = params.get("model")
+        image = params.get("image")
+        if not image:
+            return 400, {"error": "Missing required field: image", "code": "NO_IMAGE"}
+        method = params.get("method", "comfyui")
+        model = params.get("model", "BiRefNet-general")
+        output_dir = params.get("output_dir", "output")
 
-        if not image_path:
-            return 400, {"error": "Missing required field: image_path", "code": "BAD_REQUEST"}
-        if not output_path:
-            return 400, {"error": "Missing required field: output_path", "code": "BAD_REQUEST"}
-
-        # Resolve relative paths against PROJECT_DIR
-        if not os.path.isabs(image_path):
-            image_path = os.path.join(PROJECT_DIR, image_path)
-        if not os.path.isabs(output_path):
-            output_path = os.path.join(PROJECT_DIR, output_path)
-
-        page = router.pool.checkout(timeout=10)
-        if page is None:
-            return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
-
-        job_id = router.jobs.create("mask_generate", {
-            "image_path": image_path,
-            "output_path": output_path,
-            "model": model,
-        })
-        router.jobs.update(job_id, status="processing", step="queued")
-
-        def _run():
-            try:
-                router.pool.reset_page(page)
-
-                # Load image
-                load_result = router.bridge.load_image(page, image_path)
-                if not load_result.get("loaded"):
-                    router.jobs.update(job_id, status="failed",
-                                       error="Image failed to load", code="LOAD_FAILED")
-                    return
-
-                router.jobs.update(job_id, progress=20, step="image_loaded")
-
-                # Apply model override if provided
-                if model:
-                    router.bridge.apply_settings_override(page, {"aiMaskModel": model})
-
-                router.jobs.update(job_id, progress=40, step="generating_mask")
-
-                # Generate mask via ComfyUI
-                gen_result = router.bridge.generate_mask_only(
-                    page,
-                    on_progress=lambda s: router.jobs.update(job_id, step=s),
-                )
-
-                if not gen_result.get("ok"):
-                    router.jobs.update(job_id, status="failed",
-                                       error=gen_result.get("error", "Mask generation failed"),
-                                       code="MASK_FAILED")
-                    return
-
-                router.jobs.update(job_id, progress=80, step="saving_mask")
-
-                # Save the mask canvas to file
-                # Try processedMaskCanvas, then aiMaskCanvas
-                data_url = page.evaluate(
-                    """() => {
-                        const src = window.processedMaskCanvas || window.aiMaskCanvas
-                            || document.querySelector('#aiMaskCanvas');
-                        if (!src || src.width === 0) return null;
-                        return src.toDataURL('image/png');
-                    }"""
-                )
-
-                if not data_url:
-                    router.jobs.update(job_id, status="failed",
-                                       error="No mask canvas available after generation",
-                                       code="NO_MASK_CANVAS")
-                    return
-
-                import base64
-                header, b64_data = data_url.split(",", 1)
-                png_bytes = base64.b64decode(b64_data)
-                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-                with open(output_path, "wb") as fh:
-                    fh.write(png_bytes)
-
-                router.jobs.update(job_id, status="completed", progress=100,
-                                   step="done",
-                                   results={"path": output_path, "bytes": len(png_bytes),
-                                            "status": gen_result.get("status", "")})
-            except Exception as exc:
-                import traceback
-                traceback.print_exc()
-                router.jobs.update(job_id, status="failed", error=str(exc),
-                                   code="INTERNAL_ERROR")
-            finally:
-                router.pool.checkin(page)
-
-        thread = threading.Thread(target=_run, daemon=True)
+        job_id = router.jobs.create("mask", {"image": image, "method": method, "model": model})
+        thread = threading.Thread(
+            target=_run_mask_job,
+            args=(router, job_id, image, method, model, output_dir),
+            daemon=True,
+        )
         thread.start()
-
-        return 202, {"job_id": job_id, "status": "processing"}
+        return 202, {"job_id": job_id, "status": "queued"}
 
     def handle_refine(params):
-        image_path = params.get("image_path")
-        output_path = params.get("output_path")
-        settings = params.get("settings", {})
+        mask_path = params.get("mask")
+        image_path = params.get("image")
+        if not mask_path or not image_path:
+            return 400, {"error": "Missing required fields: mask, image", "code": "BAD_REQUEST"}
 
-        if not image_path:
-            return 400, {"error": "Missing required field: image_path", "code": "BAD_REQUEST"}
-        if not output_path:
-            return 400, {"error": "Missing required field: output_path", "code": "BAD_REQUEST"}
-
-        # Resolve relative paths against PROJECT_DIR
-        if not os.path.isabs(image_path):
-            image_path = os.path.join(PROJECT_DIR, image_path)
-        if not os.path.isabs(output_path):
-            output_path = os.path.join(PROJECT_DIR, output_path)
-
-        page = router.pool.checkout(timeout=10)
-        if page is None:
-            return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
+        def _do_refine(pool):
+            page = pool.checkout(timeout=10)
+            if page is None:
+                return 503, {"error": "All browser workers busy", "code": "POOL_EXHAUSTED"}
+            try:
+                pool.reset_page(page)
+                abs_image = os.path.join(PROJECT_DIR, image_path) if not os.path.isabs(image_path) else image_path
+                router.bridge.load_image(page, abs_image)
+                abs_mask = os.path.join(PROJECT_DIR, mask_path) if not os.path.isabs(mask_path) else mask_path
+                page.evaluate("() => document.querySelector('.card.closed')?.classList.remove('closed')")
+                with page.expect_file_chooser() as fc:
+                    page.click('label[for="aiMaskInput"]')
+                fc.value.set_files(abs_mask)
+                page.wait_for_timeout(1000)
+                overrides = {}
+                if "expand" in params: overrides["aiMaskExpand"] = params["expand"]
+                if "feather" in params: overrides["aiMaskFeather"] = params["feather"]
+                if "invert" in params: overrides["aiInvertMask"] = params["invert"]
+                if overrides:
+                    router.bridge.apply_settings_override(page, overrides)
+                    page.wait_for_timeout(500)
+                coverage = page.evaluate("""() => {
+                    const settings = getBgSettings();
+                    const refined = getRefinedImportedAiAlpha(settings);
+                    if (!refined) return 0;
+                    return getAlphaCoverage(refined);
+                }""")
+                out_dir = params.get("output_dir", "output")
+                abs_output = os.path.join(PROJECT_DIR, out_dir) if not os.path.isabs(out_dir) else out_dir
+                os.makedirs(abs_output, exist_ok=True)
+                base = os.path.splitext(os.path.basename(mask_path))[0]
+                out_path = os.path.join(abs_output, f"{base}_refined.png")
+                router.bridge.save_canvas_to_file(page, "aiMaskCanvas", out_path)
+                return 200, {"refined_mask": out_path, "coverage": round(coverage, 4)}
+            finally:
+                pool.checkin(page)
 
         try:
-            router.pool.reset_page(page)
-
-            # Load the main image first
-            load_result = router.bridge.load_image(page, image_path)
-            if not load_result.get("loaded"):
-                return 500, {"error": "Image failed to load", "code": "LOAD_FAILED"}
-
-            # Load AI mask via the aiMaskInput file chooser
-            mask_path = params.get("mask_path")
-            if mask_path:
-                if not os.path.isabs(mask_path):
-                    mask_path = os.path.join(PROJECT_DIR, mask_path)
-                with page.expect_file_chooser() as fc_info:
-                    page.click('label[for="aiMaskInput"]')
-                fc = fc_info.value
-                fc.set_files(mask_path)
-                # Wait briefly for mask to load
-                page.wait_for_timeout(1000)
-
-            # Apply any settings overrides (expand, feather, invert, etc.)
-            if settings:
-                router.bridge.apply_settings_override(page, settings)
-
-            # Read coverage via JS helpers
-            coverage = page.evaluate(
-                """() => {
-                    const refined = (typeof getRefinedImportedAiAlpha === 'function')
-                        ? getRefinedImportedAiAlpha() : null;
-                    const coverage = (typeof getAlphaCoverage === 'function')
-                        ? getAlphaCoverage() : null;
-                    return { refined: refined !== null, coverage };
-                }"""
-            )
-
-            # Save the refined mask — try importedAiMaskCanvas or processedMaskCanvas
-            save_result = router.bridge.save_canvas_to_file(
-                page, "importedAiMaskCanvas", output_path
-            )
-            if not save_result.get("ok"):
-                # Fall back to processedMaskCanvas
-                save_result = router.bridge.save_canvas_to_file(
-                    page, "processedMaskCanvas", output_path
-                )
-
-            return 200, {
-                "ok": save_result.get("ok", False),
-                "path": output_path,
-                "bytes": save_result.get("bytes"),
-                "coverage": coverage.get("coverage"),
-                "error": save_result.get("error"),
-            }
-
-        finally:
-            router.pool.checkin(page)
+            return router.pool.run_on_page(_do_refine, timeout=30)
+        except Exception as e:
+            return 500, {"error": str(e), "code": "INTERNAL_ERROR"}
 
     router.register_post("/api/mask/generate", handle_generate)
     router.register_post("/api/mask/refine", handle_refine)
+
+
+def _run_mask_job(router, job_id, image, method, model, output_dir):
+    router.jobs.update(job_id, status="processing", progress=0.1, step="Acquiring worker...")
+
+    def _do_mask(pool):
+        page = pool.checkout(timeout=30)
+        if page is None:
+            router.jobs.update(job_id, status="failed", error="Workers busy", code="POOL_EXHAUSTED")
+            return
+        try:
+            pool.reset_page(page)
+            abs_image = os.path.join(PROJECT_DIR, image) if not os.path.isabs(image) else image
+            router.bridge.load_image(page, abs_image)
+            router.jobs.update(job_id, progress=0.3, step="Generating mask...")
+            page.evaluate(f"() => {{ const m = document.querySelector('#comfyuiModel'); if (m) m.value = '{model}'; }}")
+            result = router.bridge.generate_mask_only(page)
+            if not result.get("ok"):
+                router.jobs.update(job_id, status="failed", error=result.get("error", "Failed"), code="MASK_FAILED")
+                return
+            abs_output = os.path.join(PROJECT_DIR, output_dir) if not os.path.isabs(output_dir) else output_dir
+            os.makedirs(abs_output, exist_ok=True)
+            base = os.path.splitext(os.path.basename(image))[0]
+            mask_path = os.path.join(abs_output, f"{base}_mask.png")
+            router.bridge.save_canvas_to_file(page, "aiMaskCanvas", mask_path)
+            router.jobs.update(job_id, status="completed", progress=1.0, results={
+                "mask": mask_path, "coverage": result.get("coverage", 0),
+                "auto_inverted": result.get("auto_inverted", False)
+            })
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            router.jobs.update(job_id, status="failed", error=str(e), code="INTERNAL_ERROR")
+        finally:
+            pool.checkin(page)
+
+    try:
+        router.pool.run_on_page(_do_mask, timeout=180)
+    except Exception as e:
+        router.jobs.update(job_id, status="failed", error=str(e), code="INTERNAL_ERROR")

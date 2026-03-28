@@ -10,12 +10,18 @@ def register(router):
 
     def _get_presets():
         if _presets_cache["data"] is None:
-            page = router.pool.checkout(timeout=10)
-            if page:
+            def _read(pool):
+                page = pool.checkout(timeout=10)
+                if page is None:
+                    return {}
                 try:
-                    _presets_cache["data"] = router.bridge.get_presets(page)
+                    return router.bridge.get_presets(page)
                 finally:
-                    router.pool.checkin(page)
+                    pool.checkin(page)
+            try:
+                _presets_cache["data"] = router.pool.run_on_page(_read, timeout=15)
+            except Exception:
+                return {}
         return _presets_cache["data"] or {}
 
     router.bridge.get_presets_cached = _get_presets

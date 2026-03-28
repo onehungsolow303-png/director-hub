@@ -246,16 +246,22 @@ if __name__ == "__main__":
     ep_split.register(api_router)
     ep_workflow.register(api_router)
 
-    with http.server.HTTPServer(("127.0.0.1", PORT), Handler) as httpd:
+    # ThreadingHTTPServer handles each request in its own thread.
+    # The Playwright pool runs its own dedicated thread internally —
+    # all page operations are dispatched to it via run_on_page().
+    class ThreadingServer(http.server.ThreadingHTTPServer):
+        daemon_threads = True
+
+    with ThreadingServer(("127.0.0.1", PORT), Handler) as httpd:
         print(f"Serving at http://127.0.0.1:{PORT}")
         print(f"API at http://127.0.0.1:{PORT}/api/*")
         print(f"ComfyUI proxy at http://127.0.0.1:{PORT}/comfyui/*")
         print(f"ComfyUI backend: {COMFYUI_BASE}")
         print(f"Directory: {DIRECTORY}")
 
-        # Start pool after server is listening
+        # Start Playwright pool (runs its own thread, blocks until ready)
         def _start_pool():
-            import time; time.sleep(2)
+            time.sleep(2)
             print("Starting Playwright pool (2 workers)...")
             api_pool.start()
             print("Playwright pool ready.")
@@ -265,6 +271,8 @@ if __name__ == "__main__":
         print("Press Ctrl+C to stop.")
         try:
             httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nShutting down...")
         finally:
             if api_pool:
                 api_pool.stop()
