@@ -983,7 +983,7 @@ function buildManualMaskCanvas(width, height, settings) {
     applyBrushPointsToMask(keepMask, width, height, settings.manualKeepBrushPoints);
   }
 
-  const alpha = new Uint8ClampedArray(width * height);
+  let alpha = new Uint8ClampedArray(width * height);
   for (let i = 0; i < alpha.length; i += 1) {
     alpha[i] = keepMask[i] ? 255 : 0;
   }
