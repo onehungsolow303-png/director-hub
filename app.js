@@ -1377,11 +1377,11 @@ function buildHybridUiMask(sourceData, width, height, tone) {
     }
     smoothedCol[x] = sum / count;
   }
-  const colThreshold = Math.max(0.08, medianDensity * 4);
+  const colThreshold = Math.max(0.06, medianDensity * 3);
   const isUiCol = new Uint8Array(width);
   for (let x = 0; x < width; x += 1) {
-    // Only mark columns near screen edges as potential UI (not center)
-    if (x < width * 0.2 || x > width * 0.8) {
+    // Only mark columns at screen edges (leftmost/rightmost 15%)
+    if (x < width * 0.15 || x > width * 0.85) {
       isUiCol[x] = smoothedCol[x] >= colThreshold ? 1 : 0;
     }
   }
