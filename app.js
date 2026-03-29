@@ -1332,12 +1332,14 @@ function buildHybridUiMask(sourceData, width, height, tone) {
     );
     // Edge strength at this pixel
     const edgeVal = edges[i];
-    // Position bonus: pixels near image edges are more likely UI
+    // Position bonus: UI bars are at TOP and BOTTOM of game screenshots,
+    // NOT at left/right (where the scene extends to screen edges)
     const x = i % width, y = Math.floor(i / width);
-    const distFromEdge = Math.min(x, width - 1 - x, y, height - 1 - y);
-    const edgeBonus = distFromEdge < height * 0.12 ? 40 : 0;
-    // Combined score: color distance + edge presence + position
-    uiScore[i] = colorDist * 0.4 + edgeVal * 0.5 + edgeBonus;
+    const nearTop = y < height * 0.08 ? 50 : 0;
+    const nearBottom = y > height * 0.72 ? 50 : 0;
+    const posBonus = nearTop + nearBottom;
+    // Combined score: balanced edge + color, with top/bottom position bonus
+    uiScore[i] = colorDist * 0.4 + edgeVal * 0.5 + posBonus;
   }
 
   // Phase 4: Threshold the UI score to create initial binary mask
@@ -1349,7 +1351,7 @@ function buildHybridUiMask(sourceData, width, height, tone) {
   }
   let cumulative = 0;
   let scoreThreshold = 255;
-  const targetPixels = total * 0.35; // UI is typically 15-35% of image
+  const targetPixels = total * 0.30; // UI is typically 15-30% of game screenshots
   for (let t = 255; t >= 0; t -= 1) {
     cumulative += histogram[t];
     if (cumulative >= targetPixels) {
@@ -1358,7 +1360,7 @@ function buildHybridUiMask(sourceData, width, height, tone) {
     }
   }
   // Ensure minimum threshold to avoid including too much background
-  scoreThreshold = Math.max(scoreThreshold, 45);
+  scoreThreshold = Math.max(scoreThreshold, 50);
 
   // Phase 5: Build alpha from thresholded scores
   const alpha = new Uint8ClampedArray(total);
@@ -1366,7 +1368,7 @@ function buildHybridUiMask(sourceData, width, height, tone) {
     alpha[i] = uiScore[i] >= scoreThreshold ? 255 : 0;
   }
 
-  // Phase 6: Clean up with morphological close (dilate then erode)
+  // Phase 6: Morphological close (dilate then erode)
   // to fill small holes in UI regions and connect nearby elements
   let cleaned = dilateAlpha(alpha, width, height, 2);
   cleaned = erodeAlpha(cleaned, width, height, 2);
@@ -1468,8 +1470,9 @@ async function aiRemoveWorkflow() {
       aiRemoveStatus.style.color = "var(--accent)";
     }
 
-    // Auto-add keep boxes for common UI positions on dark backgrounds
-    if (currentTone === "dark" && manualKeepBoxes.length === 0) {
+    // Auto-add keep boxes for common dark UI positions
+    const currentTone2 = bgTone ? bgTone.value : "dark";
+    if (currentTone2 === "dark" && manualKeepBoxes.length === 0) {
       addPresetKeepBoxes("top");
       addPresetKeepBoxes("bottom");
       addPresetKeepBoxes("icons");
