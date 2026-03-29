@@ -1,0 +1,103 @@
+{
+  "dark_reference": {
+    "transparent": 68.42,
+    "semi": 1.56,
+    "opaque": 30.03
+  },
+  "light_reference": {
+    "transparent": 60.57,
+    "semi": 0.5,
+    "opaque": 38.93
+  },
+  "dark_results": {
+    "dark-balanced": {
+      "status": "Done. Review results below and download.",
+      "error": false,
+      "stats": {
+        "transparent": 61.89,
+        "semi": 0.46,
+        "opaque": 37.65
+      },
+      "vs_ref": {
+        "alpha_mae": 21.3,
+        "trans_iou": 0.8839
+      },
+      "topbar": 98.51,
+      "botbar": 91.13,
+      "portrait": 66.43
+    },
+    "dark-soft": {
+      "status": "Step 2/2: Extracting UI with edge protection...",
+      "error": false,
+      "stats": {
+        "transparent": 61.89,
+        "semi": 0.45,
+        "opaque": 37.65
+      },
+      "vs_ref": {
+        "alpha_mae": 21.31,
+        "trans_iou": 0.8838
+      },
+      "topbar": 98.51,
+      "botbar": 91.11,
+      "portrait": 66.36
+    },
+    "dark-hard": {
+      "status": "Step 2/2: Extracting UI with edge protection...",
+      "error": false,
+      "stats": {
+        "transparent": 61.89,
+        "semi": 0.46,
+        "opaque": 37.65
+      },
+      "vs_ref": {
+        "alpha_mae": 21.3,
+        "trans_iou": 0.8839
+      },
+      "topbar": 98.51,
+      "botbar": 91.13,
+      "portrait": 66.43
+    }
+  },
+  "light_results": {
+    "light-balanced": {
+      "status": "Done. Kept 1 UI component and rejected 1 rough fragment.",
+      "error": false,
+      "stats": {
+        "transparent": 60.4,
+        "semi": 0.03,
+        "opaque": 39.57
+      },
+      "vs_ref": {
+        "alpha_mae": 0.6,
+        "trans_iou": 0.9971
+      }
+    },
+    "light-soft": {
+      "status": "Done. Kept 1 UI component and rejected 1 rough fragment.",
+      "error": false,
+      "stats": {
+        "transparent": 60.39,
+        "semi": 0.05,
+        "opaque": 39.56
+      },
+      "vs_ref": {
+        "alpha_mae": 0.59,
+        "trans_iou": 0.997
+      }
+    },
+    "light-hard": {
+      "status": "Done. Kept 1 UI component and rejected 1 rough fragment.",
+      "error": false,
+      "stats": {
+        "transparent": 60.4,
+        "semi": 0.03,
+        "opaque": 39.57
+      },
+      "vs_ref": {
+        "alpha_mae": 0.61,
+        "trans_iou": 0.9971
+      }
+    }
+  }
+}

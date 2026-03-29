@@ -1,0 +1,80 @@
+<h2>Step 3: Spill Cleanup — Detail</h2>
+<p class="subtitle">Remove color contamination from the game world at mask boundaries</p>
+
+<div class="mockup">
+  <div class="mockup-header">Spill Cleanup Algorithm</div>
+  <div class="mockup-body" style="padding: 24px; font-size: 14px; line-height: 1.8;">
+
+    <div style="margin-bottom: 20px;">
+      <div style="color: #cc8; font-weight: bold; font-size: 16px; margin-bottom: 8px;">The Problem</div>
+      <div style="color: #ccc;">At the boundary between UI and game world, pixels are a blend of both. A gold border pixel next to purple fog contains some purple. If we just set alpha, the purple "spill" shows as a color fringe on transparent backgrounds.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+      <div style="background: #1a1a1a; border: 1px solid #633; border-radius: 8px; padding: 16px; text-align: center;">
+        <div style="color: #e66; font-weight: bold; margin-bottom: 12px;">Without Spill Cleanup</div>
+        <div style="background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 0 0 / 16px 16px; padding: 20px; border-radius: 4px;">
+          <div style="height: 8px; background: linear-gradient(to right, #8b7530, #7b5a3a, #6b4060, #5a3070); border-radius: 2px;"></div>
+        </div>
+        <div style="color: #888; font-size: 12px; margin-top: 8px;">Purple fringe visible on gold border edges</div>
+      </div>
+      <div style="background: #1a1a1a; border: 1px solid #363; border-radius: 8px; padding: 16px; text-align: center;">
+        <div style="color: #6c6; font-weight: bold; margin-bottom: 12px;">With Spill Cleanup</div>
+        <div style="background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 0 0 / 16px 16px; padding: 20px; border-radius: 4px;">
+          <div style="height: 8px; background: linear-gradient(to right, #8b7530, #8b7530, #8b7530, #8b7530); border-radius: 2px;"></div>
+        </div>
+        <div style="color: #888; font-size: 12px; margin-top: 8px;">Clean gold edge, no color contamination</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #cc8;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">1. Identify boundary pixels</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        Pixels where <code style="color: #cc8;">0 &lt; alpha &lt; 255</code> after edge protection.<br>
+        These are the transition zone between kept UI and removed background.
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #cc8;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">2. Sample nearby "clean" foreground color</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        For each boundary pixel, look inward (toward fully opaque neighbors) to find<br>
+        the "true" UI color without contamination.<br>
+        <code style="color: #cc8;">cleanColor = average of neighbors where alpha == 255 within 3px radius</code>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #cc8;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">3. Unpremultiply + replace</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        Existing math from the codebase:<br>
+        <code style="color: #cc8;">// Unpremultiply to remove background contribution</code><br>
+        <code style="color: #cc8;">// Then clamp each channel toward the clean foreground color</code><br>
+        <code style="color: #cc8;">// Strength scales with how close pixel is to the edge (lower alpha = more spill)</code><br><br>
+        The existing <code>applyAlphaToImage()</code> decontamination logic already does this &mdash;<br>
+        the enhancement is feeding it <strong style="color:#fff;">better background color estimates</strong><br>
+        from the AI mask boundary rather than the single sampled background color.
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #cc8;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">4. Per-boundary background estimation</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        <strong style="color:#cc8;">Key enhancement over current approach:</strong><br><br>
+        Current: uses one global background color for all decontamination<br>
+        Enhanced: for each boundary pixel, sample the nearby <em>removed</em> pixels<br>
+        (alpha == 0 neighbors) to get the <em>local</em> background color.<br><br>
+        <code style="color: #cc8;">localBgColor = average of neighbors where alpha == 0 within 4px radius</code><br><br>
+        This means a gold border next to purple fog gets purple removed,<br>
+        while a stone frame next to dark blue rocks gets blue removed.<br>
+        Each edge gets the right cleanup for its local context.
+      </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <div style="color: #cc8; font-weight: bold; font-size: 16px; margin-bottom: 8px;">Output</div>
+      <div style="color: #ccc;">Final RGBA image &mdash; UI elements with clean transparent edges, no color fringe from the game world regardless of what color the background was locally.</div>
+    </div>
+
+  </div>
+</div>

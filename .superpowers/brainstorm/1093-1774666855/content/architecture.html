@@ -1,0 +1,68 @@
+<h2>AI Mode: Enhanced Pipeline Architecture</h2>
+<p class="subtitle">ComfyUI segmentation + edge protection + spill cleanup</p>
+
+<div class="mockup">
+  <div class="mockup-header">Pipeline Flow</div>
+  <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.6;">
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+
+      <div style="background: #1a2a1a; border: 1px solid #4a7; border-radius: 8px; padding: 16px;">
+        <div style="color: #6c8; font-weight: bold; margin-bottom: 8px;">STEP 1: ComfyUI Segmentation</div>
+        <div style="color: #aaa;">Source image &rarr; ComfyUI proxy &rarr; BiRefNet/RMBG/etc &rarr; <strong style="color:#fff;">Raw AI mask</strong></div>
+        <div style="color: #777; font-size: 11px; margin-top: 6px;">Uses whichever model is selected in the Segmentation Model dropdown</div>
+      </div>
+
+      <div style="text-align: center; color: #666; font-size: 20px;">&darr;</div>
+
+      <div style="background: #2a1a2a; border: 1px solid #a4a; border-radius: 8px; padding: 16px;">
+        <div style="color: #c8c; font-weight: bold; margin-bottom: 8px;">STEP 2: Edge Protection (NEW)</div>
+        <div style="color: #aaa;">Detect high-contrast edges in original image (Sobel-like gradient)</div>
+        <div style="color: #aaa; margin-top: 4px;">Where AI mask says "remove" but edge strength is high &rarr; <strong style="color:#fff;">bias toward keep</strong></div>
+        <div style="color: #777; font-size: 11px; margin-top: 6px;">Protects ornate borders, gold scrollwork, stone texture edges from being eaten by AI</div>
+      </div>
+
+      <div style="text-align: center; color: #666; font-size: 20px;">&darr;</div>
+
+      <div style="background: #2a2a1a; border: 1px solid #aa7; border-radius: 8px; padding: 16px;">
+        <div style="color: #cc8; font-weight: bold; margin-bottom: 8px;">STEP 3: Spill Cleanup (ENHANCED)</div>
+        <div style="color: #aaa;">For edge pixels (partial alpha): remove color contamination from game world</div>
+        <div style="color: #aaa; margin-top: 4px;">Existing unpremultiply + channel-limit clamping &rarr; <strong style="color:#fff;">clean transparent edges</strong></div>
+        <div style="color: #777; font-size: 11px; margin-top: 6px;">Uses the existing decontamination math, applied specifically to AI mask boundaries</div>
+      </div>
+
+      <div style="text-align: center; color: #666; font-size: 20px;">&darr;</div>
+
+      <div style="background: #1a1a2a; border: 1px solid #77a; border-radius: 8px; padding: 16px;">
+        <div style="color: #88c; font-weight: bold; margin-bottom: 8px;">STEP 4: Final Compositing</div>
+        <div style="color: #aaa;">Refined alpha + source image &rarr; <strong style="color:#fff;">transparent PNG with UI only</strong></div>
+        <div style="color: #aaa; margin-top: 4px;">Split panel detection, manual corrections, download &mdash; all existing tools still work</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top: 32px;">What Changes</h3>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+  <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 16px;">
+    <div style="color: #e44; font-weight: bold; margin-bottom: 8px;">Current AI Mode</div>
+    <ul style="color: #aaa; padding-left: 16px; margin: 0;">
+      <li>AI mask comes back from ComfyUI</li>
+      <li>Applied directly as alpha</li>
+      <li>Basic decontamination on edges</li>
+      <li>Ornate details often lost</li>
+    </ul>
+  </div>
+  <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 16px;">
+    <div style="color: #4c4; font-weight: bold; margin-bottom: 8px;">Enhanced AI Mode</div>
+    <ul style="color: #aaa; padding-left: 16px; margin: 0;">
+      <li>AI mask comes back from ComfyUI</li>
+      <li><strong style="color:#c8c;">Edge detection protects UI details</strong></li>
+      <li><strong style="color:#cc8;">Enhanced spill cleanup at boundaries</strong></li>
+      <li>Ornate borders and textures preserved</li>
+    </ul>
+  </div>
+</div>
+
+<h3 style="margin-top: 32px;">No UI Changes Needed</h3>
+<p style="color: #aaa;">The refinement runs automatically inside the existing AI mode pipeline. No new buttons, toggles, or modes. User clicks "Generate AI Mask" &rarr; "Process Image" same as before &mdash; just gets better results on complex scenes.</p>

@@ -1,0 +1,138 @@
+{
+  "reference": {
+    "full_sheet": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 10315269,
+      "opaque": 6630326,
+      "semi": 85573,
+      "pct_transparent": 60.57,
+      "pct_opaque": 38.93,
+      "pct_semi": 0.5,
+      "alpha_mean": 100.33
+    },
+    "top_bar": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 15242265,
+      "opaque": 1755311,
+      "semi": 33592,
+      "pct_transparent": 89.5,
+      "pct_opaque": 10.31,
+      "pct_semi": 0.2,
+      "alpha_mean": 26.73
+    },
+    "bottom_bar": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 12104172,
+      "opaque": 4875015,
+      "semi": 51981,
+      "pct_transparent": 71.07,
+      "pct_opaque": 28.62,
+      "pct_semi": 0.31,
+      "alpha_mean": 73.61
+    },
+    "portrait": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 16386097,
+      "opaque": 617702,
+      "semi": 27369,
+      "pct_transparent": 96.21,
+      "pct_opaque": 3.63,
+      "pct_semi": 0.16,
+      "alpha_mean": 9.51
+    }
+  },
+  "light-balanced": {
+    "status": "Done. Kept 1 UI component and rejected 1 rough fragment.",
+    "canvas_stats": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 10286873,
+      "opaque": 6738481,
+      "semi": 5814,
+      "pct_transparent": 60.4,
+      "pct_opaque": 39.57,
+      "pct_semi": 0.03
+    },
+    "panel_count": 1,
+    "panel_dims": [
+      {
+        "w": 6336,
+        "h": 319
+      }
+    ]
+  },
+  "light-soft": {
+    "status": "Done. Kept 1 UI component and rejected 1 rough fragment.",
+    "canvas_stats": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 10285642,
+      "opaque": 6737819,
+      "semi": 7707,
+      "pct_transparent": 60.39,
+      "pct_opaque": 39.56,
+      "pct_semi": 0.05
+    },
+    "panel_count": 1,
+    "panel_dims": [
+      {
+        "w": 6336,
+        "h": 321
+      }
+    ]
+  },
+  "light-hard": {
+    "status": "Done. Kept 1 UI component and rejected 1 rough fragment.",
+    "canvas_stats": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 10286854,
+      "opaque": 6739409,
+      "semi": 4905,
+      "pct_transparent": 60.4,
+      "pct_opaque": 39.57,
+      "pct_semi": 0.03
+    },
+    "panel_count": 1,
+    "panel_dims": [
+      {
+        "w": 6336,
+        "h": 320
+      }
+    ]
+  },
+  "light-ai": {
+    "status": "Done. Review results below and download.",
+    "canvas_stats": {
+      "width": 6336,
+      "height": 2688,
+      "total_px": 17031168,
+      "transparent": 14125254,
+      "opaque": 2596927,
+      "semi": 308987,
+      "pct_transparent": 82.94,
+      "pct_opaque": 15.25,
+      "pct_semi": 1.81
+    },
+    "panel_count": 1,
+    "panel_dims": [
+      {
+        "w": 2910,
+        "h": 678
+      }
+    ],
+    "comfyui_available": false,
+    "ai_failed": false
+  }
+}

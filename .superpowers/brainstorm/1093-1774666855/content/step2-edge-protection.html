@@ -1,0 +1,66 @@
+<h2>Step 2: Edge Protection — Detail</h2>
+<p class="subtitle">How the edge detector protects UI details from the AI mask</p>
+
+<div class="mockup">
+  <div class="mockup-header">Edge Protection Algorithm</div>
+  <div class="mockup-body" style="padding: 24px; font-size: 14px; line-height: 1.8;">
+
+    <div style="margin-bottom: 20px;">
+      <div style="color: #c8c; font-weight: bold; font-size: 16px; margin-bottom: 8px;">Input</div>
+      <div style="color: #ccc;">Original source image pixels + Raw AI mask alpha channel</div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #c8c;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">1. Compute gradient magnitude per pixel</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        For each pixel, compute horizontal &amp; vertical gradients across RGB channels:<br>
+        <code style="color: #c8c;">gx = |R(x+1) - R(x-1)| + |G(x+1) - G(x-1)| + |B(x+1) - B(x-1)|</code><br>
+        <code style="color: #c8c;">gy = |R(y+1) - R(y-1)| + |G(y+1) - G(y-1)| + |B(y+1) - B(y-1)|</code><br>
+        <code style="color: #c8c;">gradient = sqrt(gx*gx + gy*gy)</code><br><br>
+        Normalize to 0-255 range. This finds borders, text edges, ornate detail.
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #c8c;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">2. Build edge strength map</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        Threshold the gradient to create an "edge confidence" value:<br>
+        <code style="color: #c8c;">edgeStrength[i] = clamp(gradient[i] - minEdge, 0, maxEdge) / maxEdge</code><br><br>
+        <code style="color: #777;">minEdge ~30 (ignore noise/subtle texture)</code><br>
+        <code style="color: #777;">maxEdge ~120 (strong borders get full protection)</code><br><br>
+        Gold scrollwork edges: gradient ~80-200 &rarr; strong protection<br>
+        Cave rock texture: gradient ~10-40 &rarr; weak or no protection<br>
+        Text/icons: gradient ~60-150 &rarr; good protection
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #c8c;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">3. Dilate edge map</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        Expand strong edges by 2-3px radius so protection covers the border AND its immediate neighbors.<br>
+        This prevents the AI from eating one side of a thin gold border.
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; background: #111; padding: 16px; border-radius: 6px; border-left: 3px solid #c8c;">
+      <div style="color: #fff; font-weight: bold; margin-bottom: 8px;">4. Merge with AI mask</div>
+      <div style="color: #aaa; font-family: monospace; font-size: 12px;">
+        Where AI mask says "remove" (alpha=0) but edge strength is high:<br>
+        <code style="color: #c8c;">finalAlpha[i] = max(aiAlpha[i], edgeStrength[i] * 255)</code><br><br>
+        This "rescues" pixels the AI incorrectly classified as background<br>
+        but that are clearly part of a UI border or detail.
+      </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <div style="color: #c8c; font-weight: bold; font-size: 16px; margin-bottom: 8px;">Output</div>
+      <div style="color: #ccc;">Edge-protected alpha channel &mdash; AI decisions preserved where edges are weak (game world), overridden where edges are strong (UI borders)</div>
+    </div>
+
+  </div>
+</div>
+
+<h3 style="margin-top: 24px;">Why This Works for Game UI</h3>
+<div style="color: #aaa; line-height: 1.7; max-width: 700px;">
+  Game UI elements (gold borders, stone frames, text, icons) have <strong style="color:#fff;">sharp, high-contrast edges</strong> by design &mdash; they need to be readable over any game scene. The 3D game world behind them has <strong style="color:#fff;">softer, more organic gradients</strong> (fog, lighting, rock surfaces). The edge detector exploits this natural difference.
+</div>
