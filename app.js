@@ -1434,37 +1434,71 @@ function restoreEdgeColorsFromOriginal(finalCanvas, sourceCanvas) {
   const resultCtx = resultCanvas.getContext("2d");
   const resultData = resultCtx.createImageData(width, height);
   const rd = resultData.data;
+  const total = width * height;
 
-  const opaqueThreshold = 240;
-  const transparentThreshold = 10;
+  // Build distance-to-transparency map using two-pass Chebyshev transform.
+  // After binarization most pixels are alpha 0 or 255. Edge pixels (alpha
+  // 10-240) barely exist, so the old approach of blending only those pixels
+  // produced invisible results. Instead we use the distance map to find
+  // opaque pixels NEAR the transparency boundary and restore their colors
+  // from the original + add anti-aliased feathering.
+  const dist = new Uint8Array(total);
+  dist.fill(255);
+  for (let i = 0; i < total; i += 1) {
+    if (fd[i * 4 + 3] === 0) dist[i] = 0;
+  }
+  // Forward pass (top-left to bottom-right)
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const idx = y * width + x;
+      if (dist[idx] === 0) continue;
+      let min = 255;
+      if (x > 0) min = Math.min(min, dist[idx - 1]);
+      if (y > 0) min = Math.min(min, dist[idx - width]);
+      if (x > 0 && y > 0) min = Math.min(min, dist[idx - width - 1]);
+      if (x < width - 1 && y > 0) min = Math.min(min, dist[idx - width + 1]);
+      dist[idx] = Math.min(dist[idx], min + 1);
+    }
+  }
+  // Backward pass (bottom-right to top-left)
+  for (let y = height - 1; y >= 0; y -= 1) {
+    for (let x = width - 1; x >= 0; x -= 1) {
+      const idx = y * width + x;
+      if (dist[idx] === 0) continue;
+      let min = dist[idx];
+      if (x < width - 1) min = Math.min(min, dist[idx + 1] + 1);
+      if (y < height - 1) min = Math.min(min, dist[idx + width] + 1);
+      if (x < width - 1 && y < height - 1) min = Math.min(min, dist[idx + width + 1] + 1);
+      if (x > 0 && y < height - 1) min = Math.min(min, dist[idx + width - 1] + 1);
+      dist[idx] = min;
+    }
+  }
 
-  for (let i = 0; i < fd.length; i += 4) {
-    const a = fd[i + 3];
-    rd[i + 3] = a;
-
-    if (a <= transparentThreshold) {
-      // Fully transparent — keep as zero
-      rd[i] = 0;
-      rd[i + 1] = 0;
-      rd[i + 2] = 0;
-      rd[i + 3] = 0;
+  const BORDER = 3;   // restore original colors within 3px of edge
+  for (let i = 0; i < total; i += 1) {
+    const off = i * 4;
+    const a = fd[off + 3];
+    if (a === 0) {
+      rd[off] = 0; rd[off + 1] = 0; rd[off + 2] = 0; rd[off + 3] = 0;
       continue;
     }
-
-    if (a >= opaqueThreshold) {
-      // Fully opaque — keep processed colors (user: don't restore opaque)
-      rd[i] = fd[i];
-      rd[i + 1] = fd[i + 1];
-      rd[i + 2] = fd[i + 2];
-      continue;
+    const d = dist[i];
+    if (d <= BORDER) {
+      // Border zone: use original source RGB for cleanest colors
+      rd[off]     = sd[off];
+      rd[off + 1] = sd[off + 1];
+      rd[off + 2] = sd[off + 2];
+      // Anti-aliased feather at outermost pixels
+      if (d === 1) rd[off + 3] = 192;
+      else if (d === 2) rd[off + 3] = 224;
+      else rd[off + 3] = 255;
+    } else {
+      // Interior: keep processed colors
+      rd[off]     = fd[off];
+      rd[off + 1] = fd[off + 1];
+      rd[off + 2] = fd[off + 2];
+      rd[off + 3] = a;
     }
-
-    // Partial alpha (edge pixel): blend original color back
-    // Higher alpha = more original, lower alpha = more processed
-    const blend = (a - transparentThreshold) / (opaqueThreshold - transparentThreshold);
-    rd[i]     = Math.round(fd[i]     * (1 - blend) + sd[i]     * blend);
-    rd[i + 1] = Math.round(fd[i + 1] * (1 - blend) + sd[i + 1] * blend);
-    rd[i + 2] = Math.round(fd[i + 2] * (1 - blend) + sd[i + 2] * blend);
   }
 
   resultCtx.putImageData(resultData, 0, 0);
