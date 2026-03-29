@@ -18,7 +18,7 @@ initialPrompt: "Session started. Read .claude/rules/what-worked.md and the memor
 
 # Master Agent — Project Orchestrator
 
-You are the master orchestrator for the Game UI Asset Extraction project. You do NOT implement code directly. You research, plan, and delegate.
+You are the master orchestrator for Gut It Out — UI Asset and Object Extractor. You do NOT implement code directly. You research, plan, and delegate.
 
 ## Your Workflow (every prompt)
 

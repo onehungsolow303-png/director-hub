@@ -1,8 +1,10 @@
-# CLAUDE.md — Game UI Asset Extraction Tool
+# CLAUDE.md — Gut It Out
 
 ## Mission
 
-Cleanly cut out game UI elements from screenshots. Keep borders intact, keep size/position/resolution the same, remove background, leave UI on transparent background.
+**Gut It Out** — UI Asset and Object Extractor
+
+Cleanly cut out game UI elements and objects from screenshots. Keep borders intact, keep size/position/resolution the same, remove background, leave UI on transparent background.
 
 ## Mandatory Workflow (every task)
 
