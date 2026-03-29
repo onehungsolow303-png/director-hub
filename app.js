@@ -229,6 +229,7 @@ let processedMaskAlpha = null;
 let manualMaskCanvas = null;
 let aiMaskCanvas = null;
 let importedAiMaskAlpha = null;
+let importedAiMaskIsInternal = false; // true when mask is from internal detection (has soft edges)
 let comfyuiConnected = false;
 let onnxSession = null;
 let onnxModelLoading = false;
@@ -914,10 +915,12 @@ function refineImportedAiMaskAlpha(alpha, width, height, settings) {
   // Binarize soft AI masks: AI segmentation models output graduated
   // probability masks; without this step, background pixels with soft
   // values become semi-transparent ghosts instead of being fully removed.
-  // Use midpoint threshold to produce clean 0/255 mask.
-  const threshold = 128;
-  for (let i = 0; i < refined.length; i += 1) {
-    refined[i] = refined[i] >= threshold ? 255 : 0;
+  // Skip for internal detection masks which have intentional soft edges.
+  if (!importedAiMaskIsInternal) {
+    const threshold = 128;
+    for (let i = 0; i < refined.length; i += 1) {
+      refined[i] = refined[i] >= threshold ? 255 : 0;
+    }
   }
   if (settings.aiInvertMask) {
     for (let i = 0; i < refined.length; i += 1) {
@@ -1020,6 +1023,7 @@ function handleAiMaskInput(event) {
     const canvas = createCanvas(image.width, image.height);
     drawImagePreservingRGB(image, canvas);
     importedAiMaskAlpha = alphaFromMaskCanvas(canvas);
+    importedAiMaskIsInternal = false;
     rebuildImportedAiMaskCanvas();
     if (bgMaskSource) bgMaskSource.value = "ai";
     if (bgPreviewTarget) bgPreviewTarget.value = "mask";
@@ -1759,6 +1763,31 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     objects.push(obj); nextLabel += 1;
   }
 
+  // ── Build Region Adjacency Graph (RAG) ──
+  // For each border pixel, check which labeled regions it separates.
+  // This gives us topology: which regions are neighbors across borders.
+  const adjacency = new Map(); // label → Set of neighbor labels
+  for (const obj of objects) adjacency.set(obj.label, new Set());
+  for (let i = 0; i < total; i += 1) {
+    if (!isBorder[i]) continue;
+    const cx = i % width, cy = (i - cx) / width;
+    const neighbors = new Set();
+    if (cx > 0          && labels[i - 1] > 0)     neighbors.add(labels[i - 1]);
+    if (cx < width - 1  && labels[i + 1] > 0)     neighbors.add(labels[i + 1]);
+    if (cy > 0          && labels[i - width] > 0)  neighbors.add(labels[i - width]);
+    if (cy < height - 1 && labels[i + width] > 0)  neighbors.add(labels[i + width]);
+    // Connect all pairs of neighbors across this border pixel
+    const arr = [...neighbors];
+    for (let a = 0; a < arr.length; a += 1) {
+      for (let b = a + 1; b < arr.length; b += 1) {
+        if (!adjacency.has(arr[a])) adjacency.set(arr[a], new Set());
+        if (!adjacency.has(arr[b])) adjacency.set(arr[b], new Set());
+        adjacency.get(arr[a]).add(arr[b]);
+        adjacency.get(arr[b]).add(arr[a]);
+      }
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════
   // PASS 4: Object metrics
   // ══════════════════════════════════════════════════════════════════════
@@ -1819,9 +1848,9 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     // Content check: UI has low variance OR low interior detail relative to background
     if (obj.colorVariance < bgColorVar * 0.55) return true;           // low variance = UI fill
     if (obj.interiorEdgeDensity < bgEdgeDensity * 0.60) return true;  // smooth interior = UI
-    // Edge-touching regions get extra protection — UI bars anchor to image edges
-    if (obj.touchesEdge) return true;
-    // Both high variance AND high edge density AND not edge-touching = scene content
+    // Edge-touching: protect if EITHER variance or edge density is moderate (not both high)
+    if (obj.touchesEdge && (obj.colorVariance < bgColorVar * 0.75 || obj.interiorEdgeDensity < bgEdgeDensity * 0.75)) return true;
+    // Both high variance AND high edge density = scene content despite bar-like shape
     return false;
   }
 
@@ -1845,34 +1874,53 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     }
   }
 
-  // ── Trapped background detector ──
-  // Enclosed regions (don't touch edge) that score on MULTIPLE background
-  // signals are game scene content trapped between UI panels.
-  // Large trapped regions (>2%) need only 2 signals. Smaller need 3.
+  // ── Trapped background detector (RAG-enhanced) ──
+  // Uses the Region Adjacency Graph for topology-based detection:
+  // If a region is SURROUNDED by background/border regions, it's trapped scene content.
+  // Falls back to signal-based detection for regions not fully enclosed.
   let trappedCount = 0;
-  for (const obj of objects) {
-    if (bgLabels.has(obj.label)) continue;
-    if (obj.touchesEdge) continue;
-    if (obj.pixelCount < total * 0.002) continue;
+  let ragChanged = true;
+  while (ragChanged) {
+    ragChanged = false;
+    for (const obj of objects) {
+      if (bgLabels.has(obj.label)) continue;
+      if (obj.touchesEdge) continue;
+      if (obj.pixelCount < total * 0.001) continue;
 
-    // Protect UI-shaped regions from trapped bg classification too
-    if (hasUiShape(obj)) continue;
+      // RAG check: are ALL neighbors either background or border?
+      const neighbors = adjacency.get(obj.label);
+      if (neighbors && neighbors.size > 0) {
+        const allNeighborsBg = [...neighbors].every(n => bgLabels.has(n));
+        if (allNeighborsBg && obj.colorVariance > bgColorVar * 0.35) {
+          // Completely enclosed by background AND has scene-like variance
+          bgLabels.add(obj.label);
+          trappedCount += 1;
+          ragChanged = true;
+          continue;
+        }
+      }
 
-    let bgSignals = 0;
-    if (obj.colorVariance > bgColorVar * 0.45) bgSignals += 1;     // high variance
-    if (obj.rectangularity < 0.45) bgSignals += 1;                  // irregular or moderate shape
-    if (obj.interiorEdgeDensity > bgEdgeDensity * 0.50) bgSignals += 1; // complex interior
-    if (obj.borderContactRatio < 0.60) bgSignals += 1;              // not strongly bordered
+      // Protect UI-shaped regions from signal-based classification
+      if (hasUiShape(obj)) continue;
 
-    // Large trapped regions (>1% of image) need fewer signals — they're almost certainly scene
-    const minSignals = obj.pixelCount > total * 0.01 ? 2 : 3;
+      // Signal-based fallback for regions not fully enclosed by bg
+      let bgSignals = 0;
+      if (obj.colorVariance > bgColorVar * 0.45) bgSignals += 1;     // high variance
+      if (obj.rectangularity < 0.45) bgSignals += 1;                  // irregular or moderate shape
+      if (obj.interiorEdgeDensity > bgEdgeDensity * 0.50) bgSignals += 1; // complex interior
+      if (obj.borderContactRatio < 0.60) bgSignals += 1;              // not strongly bordered
 
-    if (bgSignals >= minSignals) {
-      bgLabels.add(obj.label);
-      trappedCount += 1;
+      // Large trapped regions (>1% of image) need fewer signals
+      const minSignals = obj.pixelCount > total * 0.01 ? 2 : 3;
+
+      if (bgSignals >= minSignals) {
+        bgLabels.add(obj.label);
+        trappedCount += 1;
+        ragChanged = true;
+      }
     }
   }
-  if (trappedCount > 0) console.log(`[v5+] Trapped background: ${trappedCount} enclosed regions identified as scene content`);
+  if (trappedCount > 0) console.log(`[v5+ RAG] Trapped background: ${trappedCount} enclosed regions identified as scene content`);
 
   // ══════════════════════════════════════════════════════════════════════
   // PASS 7: INVERT SELECTION
@@ -1942,6 +1990,46 @@ function buildBlackBorderUiMask(sourceData, width, height) {
       if (cy < height - 1 && !seen[ci + width]  && alpha[ci + width]) { seen[ci + width] = 1; q2.push(ci + width); }
     }
     if (comp.length < minFrag) { for (const pi of comp) alpha[pi] = 0; }
+  }
+
+  // ── Soft edge feathering via distance transform ──
+  // Compute distance from each mask-boundary pixel inward, apply graduated alpha
+  // at the outermost 2px to create soft edges matching reference quality (1.5% semi-transparent)
+  const featherRadius = 2;
+  const boundaryDist = new Uint8Array(total);
+  boundaryDist.fill(255);
+  // Seed: selected pixels adjacent to non-selected pixels (the mask boundary)
+  const featherQ = [];
+  for (let i = 0; i < total; i += 1) {
+    if (!alpha[i]) continue;
+    const cx = i % width, cy = (i - cx) / width;
+    const hasTransparentNeighbor =
+      (cx > 0          && !alpha[i - 1]) ||
+      (cx < width - 1  && !alpha[i + 1]) ||
+      (cy > 0          && !alpha[i - width]) ||
+      (cy < height - 1 && !alpha[i + width]);
+    if (hasTransparentNeighbor) { boundaryDist[i] = 0; featherQ.push(i); }
+  }
+  // BFS inward from boundary to compute distance
+  let fh = 0;
+  while (fh < featherQ.length) {
+    const ci = featherQ[fh++];
+    const d = boundaryDist[ci];
+    if (d >= featherRadius) continue;
+    const cx = ci % width, cy = (ci - cx) / width;
+    const nd = d + 1;
+    if (cx > 0          && alpha[ci - 1]     && boundaryDist[ci - 1] > nd)     { boundaryDist[ci - 1] = nd;     featherQ.push(ci - 1); }
+    if (cx < width - 1  && alpha[ci + 1]     && boundaryDist[ci + 1] > nd)     { boundaryDist[ci + 1] = nd;     featherQ.push(ci + 1); }
+    if (cy > 0          && alpha[ci - width]  && boundaryDist[ci - width] > nd) { boundaryDist[ci - width] = nd; featherQ.push(ci - width); }
+    if (cy < height - 1 && alpha[ci + width]  && boundaryDist[ci + width] > nd) { boundaryDist[ci + width] = nd; featherQ.push(ci + width); }
+  }
+  // Apply graduated alpha at boundary: dist 0 = 128, dist 1 = 192, dist 2+ = 255
+  const featherAlpha = [128, 192];
+  for (let i = 0; i < total; i += 1) {
+    if (!alpha[i]) continue;
+    if (boundaryDist[i] < featherRadius) {
+      alpha[i] = featherAlpha[boundaryDist[i]] || 255;
+    }
   }
 
   const kept = alpha.reduce((s, a) => s + (a > 0 ? 1 : 0), 0);
@@ -2137,6 +2225,7 @@ async function aiRemoveWorkflow() {
 
     // Store as imported AI mask so the rest of the pipeline works
     importedAiMaskAlpha = hybridAlpha;
+    importedAiMaskIsInternal = true; // skip binarization — internal mask has intentional soft edges
     rebuildImportedAiMaskCanvas();
 
     // Set mode to AI with imported mask
