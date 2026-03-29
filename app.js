@@ -38,7 +38,7 @@ const bgPresets = {
     cropTransparent: false, decontaminate: true, tone: "dark",
     edgeCleanupStrength: 65, strongBorderRepair: false, preserveColor: true, secondPass: false,
     aiConfidence: 72, aiMatte: 68, aiSpill: 62, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0,
-    comfyui: { model: "BiRefNet-general", mask_blur: 0, mask_offset: 0, invert_output: false, refine_foreground: false, background: "Alpha" }
+    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 1.0, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
   },
   "dark-soft": {
     threshold: 14, softness: 34, alphaFloor: 4, alphaCeiling: 245,
@@ -46,7 +46,7 @@ const bgPresets = {
     cropTransparent: false, decontaminate: true, tone: "dark",
     edgeCleanupStrength: 45, strongBorderRepair: false, preserveColor: true, secondPass: false,
     aiConfidence: 68, aiMatte: 72, aiSpill: 55, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1,
-    comfyui: { model: "BiRefNet-general", mask_blur: 1, mask_offset: 0, invert_output: false, refine_foreground: false, background: "Alpha" }
+    comfyui: { model: "RMBG-2.0", mask_blur: 1, mask_offset: 0, sensitivity: 0.95, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
   },
   "dark-hard": {
     threshold: 24, softness: 16, alphaFloor: 12, alphaCeiling: 238,
@@ -54,7 +54,7 @@ const bgPresets = {
     cropTransparent: false, decontaminate: true, tone: "dark",
     edgeCleanupStrength: 80, strongBorderRepair: false, preserveColor: false, secondPass: true,
     aiConfidence: 78, aiMatte: 62, aiSpill: 70, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0,
-    comfyui: { model: "BiRefNet-general", mask_blur: 0, mask_offset: 0, invert_output: false, refine_foreground: false, background: "Alpha" }
+    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 1.0, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
   },
   // Light background presets (UI sheets with white/light grey backgrounds)
   "light-balanced": {
@@ -1366,6 +1366,10 @@ async function aiRemoveWorkflow() {
 
     // Auto-trigger Process Image
     await processBackgroundImage();
+
+    // Show the extracted result, not the mask preview
+    if (bgPreviewTarget) bgPreviewTarget.value = "result";
+    syncMainPreviewFromLayout();
 
     if (aiRemoveStatus) {
       aiRemoveStatus.textContent = "Done. Review results below and download.";
@@ -3165,6 +3169,22 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
     settings.manualKeepBoxes,
     settings.manualKeepBrushPoints
   );
+  // Zero out rejected components in the result — removes scenic debris
+  // from the full-sheet output, not just from split panels.
+  if (rejected.length > 0 && importedAiMaskAlpha) {
+    const rd = resultData.data;
+    for (const box of rejected) {
+      for (let y = box.top; y < box.bottom && y < sourceCanvas.height; y += 1) {
+        for (let x = box.left; x < box.right && x < sourceCanvas.width; x += 1) {
+          const idx = (y * sourceCanvas.width + x) * 4;
+          if (rd[idx + 3] > 0) {
+            rd[idx] = 0; rd[idx + 1] = 0; rd[idx + 2] = 0; rd[idx + 3] = 0;
+          }
+        }
+      }
+    }
+    fullLayoutCanvas.getContext("2d").putImageData(resultData, 0, 0);
+  }
   let keepMask = buildKeepMask(
     sourceCanvas.width,
     sourceCanvas.height,
@@ -4009,7 +4029,12 @@ function filterComponentBoxes(boxes, width, height, keepSamples = [], keepBoxes 
       (isHuge && edgeHeavy && box.solidity < 0.7) ||
       (box.edgeTouches >= 3 && box.solidity < 0.82) ||
       (heightRatio > 0.55 && widthRatio < 0.2) ||
-      (widthRatio > 0.55 && heightRatio > 0.55);
+      (widthRatio > 0.55 && heightRatio > 0.55) ||
+      // Irregular shapes: low solidity means the component doesn't fill its
+      // bounding box — cave fragments are blobby, UI elements are rectangular
+      (box.solidity < 0.35) ||
+      // Medium-low solidity + doesn't span an edge = likely scenic debris
+      (box.solidity < 0.55 && !isHorizontalBar && !isVerticalBar && !isPanelLike);
 
     const keepPointInside = keepSamples.some((sample) => (
       sample.x >= box.left && sample.x < box.right && sample.y >= box.top && sample.y < box.bottom
