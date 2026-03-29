@@ -9,6 +9,7 @@ Produces a self-contained HTML report with:
 
 import base64
 import json
+import math
 from io import BytesIO
 from pathlib import Path
 
@@ -128,6 +129,25 @@ REPORT_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+class _NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that converts numpy scalar types to native Python types."""
+
+    def default(self, obj):
+        try:
+            import numpy as np
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                if math.isnan(obj) or math.isinf(obj):
+                    return None
+                return float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+        except ImportError:
+            pass
+        return super().default(obj)
+
+
 def _img_to_b64(img: Image.Image, max_size: tuple = (800, 600)) -> str:
     """Convert PIL Image to base64 PNG string, resized for report embedding."""
     thumb = img.copy()
@@ -215,4 +235,4 @@ def save_json_report(cases: list[dict], gate_results: dict, output_path: str | P
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, cls=_NumpyEncoder)
