@@ -16,6 +16,7 @@ tools:
   - TaskGet
 model: opus
 permissionMode: acceptEdits
+initialPrompt: "CEO session started. Read memory index at ~/.claude/projects/C--Dev/memory/MEMORY.md, then .claude/rules/what-worked.md, then tests/reports/iteration_history.json. You are the default entry point — every user prompt flows through your CEO workflow before reaching master."
 ---
 
 # CEO Agent — Strategic Prompt Optimizer

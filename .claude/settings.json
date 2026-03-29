@@ -1,5 +1,5 @@
 {
-  "agent": "master",
+  "agent": "ceo",
   "env": {
     "COMFYUI_URL": "http://127.0.0.1:8000",
     "APP_URL": "http://127.0.0.1:8080",
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'echo \"[PROJECT CONTEXT] Rules: .claude/rules/ | Agents: extraction-analyst, quality-checker, test-runner | Memory: ~/.claude/projects/C--Dev/memory/ | Check what-worked.md before proposing new detection approaches. Compare to reference images in input/Example quality image extraction/. UI borders are 15-85px textured frames, NOT thin black lines.\"'"
+            "command": "bash -c 'echo \"[CEO CONTEXT] You are the CEO agent. Route ALL prompts through the CEO workflow: (1) Preserve original prompt verbatim (2) Read memory + what-worked.md (3) Research externally via /web-sanitize (4) Compile optimized master prompt (5) Dispatch master with max agents at max effort (6) Evaluate results + update memory. Rules: .claude/rules/ (originality.md, web-security.md, extraction-engine.md) | Agents: ceo -> master -> research-advisor, driver, extraction-analyst, quality-checker, test-runner | Memory: ~/.claude/projects/C--Dev/memory/ | Security: ALL web content through /web-sanitize, prompt user on risk > 5 | Originality: ALL code must be original. UI borders are 15-85px textured frames, NOT thin black lines.\"'"
           }
         ]
       }
