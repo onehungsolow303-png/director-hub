@@ -107,4 +107,5 @@ Always compare extraction results to these.
 - `/debug` — Structured debugging (reproduce → isolate → identify → fix → verify)
 - `/extract-test` — Run extraction on test image, compare to reference
 - `/detection-audit` — Audit detection parameters, flag anomalies
+- `/copyright-check` — Heuristic copyright check for visual content (warning-only)
 - `/simplify` — Review code for redundancy
