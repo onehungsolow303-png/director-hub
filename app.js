@@ -4517,9 +4517,10 @@ async function processBackgroundImage() {
           : `${processed.status} AI auto mask is currently using the heuristic preview path until a local segmentation model is connected.`
       : processed.status;
     updateMaskStatusBlock();
-    // Show AI Enhance block after AI mode processing
+    // Show AI Enhance block and auto-run enhance after AI mode processing
     if (settings.mode === "ai" && importedAiMaskAlpha) {
       showAiEnhanceBlock();
+      runAiEnhance();
     }
   } catch (error) {
     if ((error.message || "") === "Processing canceled.") {
