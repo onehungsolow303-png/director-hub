@@ -52,6 +52,9 @@ Master spawns all agents (Claude Code limitation: subagents cannot spawn sub-sub
 | `extraction-engine.md` | app.js | v5+ architecture, parameters, what worked/failed |
 | `code-quality.md` | JS/PY/HTML/CSS | Syntax checks, no blind edits, preserve quality |
 | `what-worked.md` | All files | Living history of approaches and outcomes |
+| `originality.md` | All files | All code must be original, no copy-paste from external sources |
+| `web-security.md` | All files | Sanitize web content, domain allowlist, injection detection |
+| `copyright.md` | All files | Copyright infringement detection on visual content (warning-only) |
 
 ## Primary Stack
 
@@ -108,4 +111,6 @@ Always compare extraction results to these.
 - `/extract-test` — Run extraction on test image, compare to reference
 - `/detection-audit` — Audit detection parameters, flag anomalies
 - `/copyright-check` — Heuristic copyright check for visual content (warning-only)
+- `/web-sanitize` — Sanitize web-fetched content, scan for injection, score risk
+- `/injection-guard` — Pre-processing guard for external content, detect injection attempts
 - `/simplify` — Review code for redundancy

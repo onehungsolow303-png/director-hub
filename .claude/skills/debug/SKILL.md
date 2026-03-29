@@ -1,3 +1,8 @@
+---
+name: debug
+description: Structured debugging workflow — reproduce, isolate, identify, fix, verify. Follow steps in order.
+---
+
 # Debug Skill
 
 Structured debugging workflow. Follow these steps in order — do not skip ahead.

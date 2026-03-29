@@ -1,10 +1,8 @@
 ---
 name: master
-description: Master orchestrator agent — receives prompts, performs comparative analysis using research-advisor, creates overview plans, delegates execution to driver agent. Set as default session agent.
+description: Master orchestrator agent — receives optimized prompts from CEO, performs comparative analysis using research-advisor, creates overview plans, delegates execution to driver agent.
 tools:
   - Read
-  - Edit
-  - Write
   - Grep
   - Glob
   - Bash
