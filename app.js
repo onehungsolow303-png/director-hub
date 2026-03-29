@@ -1723,6 +1723,41 @@ function buildBlackBorderUiMask(sourceData, width, height) {
 
   console.log(`[v5+] Border enhancement: +${enhancedCount} pixels (hysteresis + gap bridging)`);
 
+  // ── Pass 2c: Horizontal structure border detection ──
+  // Detect continuous horizontal lines of dark/border-like pixels that span
+  // a significant width. These are UI bar boundaries (top/bottom of panels)
+  // that the gradient detector misses when both sides are dark.
+  let structBorderCount = 0;
+  for (let y = 0; y < height; y += 1) {
+    // Count dark achromatic pixels in this row that aren't already borders
+    let darkRun = 0, maxDarkRun = 0, darkTotal = 0;
+    for (let x = 0; x < width; x += 1) {
+      const idx = y * width + x;
+      if (isBorder[idx]) { darkRun = 0; continue; }
+      const off = idx * 4;
+      const maxCh = Math.max(data[off], data[off + 1], data[off + 2]);
+      const minCh = Math.min(data[off], data[off + 1], data[off + 2]);
+      if (maxCh < 70 && maxCh - minCh <= 18) {
+        darkRun += 1; darkTotal += 1;
+        if (darkRun > maxDarkRun) maxDarkRun = darkRun;
+      } else { darkRun = 0; }
+    }
+    // If this row has a long continuous dark run (>20% of width), mark as border
+    if (maxDarkRun > width * 0.20 && darkTotal > width * 0.25) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = y * width + x;
+        if (isBorder[idx]) continue;
+        const off = idx * 4;
+        const maxCh = Math.max(data[off], data[off + 1], data[off + 2]);
+        const minCh = Math.min(data[off], data[off + 1], data[off + 2]);
+        if (maxCh < 70 && maxCh - minCh <= 18) {
+          isBorder[idx] = 1; structBorderCount += 1;
+        }
+      }
+    }
+  }
+  if (structBorderCount > 0) console.log(`[v5+] Structural horizontal borders: +${structBorderCount} pixels`);
+
   // ══════════════════════════════════════════════════════════════════════
   // PASS 3: Component labeling (regions between borders)
   // Borders are BOUNDARIES — regions can't cross them.
@@ -1962,6 +1997,24 @@ function buildBlackBorderUiMask(sourceData, width, height) {
   // No per-object scoring threshold — if it's not background, it's UI.
   // Small fragments cleaned up after.
   // ══════════════════════════════════════════════════════════════════════
+
+  // ── Bottom-UI force rescue ──
+  // Game UIs always have bars/panels at the bottom. Any BG-classified region
+  // centered in the bottom 40% with significant border contact is UI, not scene.
+  const primaryBgObj = bgObj;
+  const primaryBgCenterY = primaryBgObj ? (primaryBgObj.minY + primaryBgObj.maxY) / 2 / height : 0.4;
+  let bottomRescueCount = 0;
+  for (const obj of objects) {
+    if (!bgLabels.has(obj.label)) continue;
+    if (obj.label === bgLabel) continue;
+    const objCenterY = (obj.minY + obj.maxY) / 2 / height;
+    // Rescue if: centered below 60% of image AND has border contact AND not tiny
+    if (objCenterY > 0.60 && obj.borderContactRatio > 0.15 && obj.pixelCount > total * 0.002) {
+      bgLabels.delete(obj.label);
+      bottomRescueCount += 1;
+    }
+  }
+  if (bottomRescueCount > 0) console.log(`[v5+] Bottom-UI rescue: ${bottomRescueCount} regions in bottom half rescued`);
 
   const selection = new Uint8Array(total);
   for (let i = 0; i < total; i += 1) {
@@ -2282,18 +2335,21 @@ async function aiRemoveWorkflow() {
 
     // Step 1: Generate mask — try black border detection first (exploits thin dark
     // outlines common to game UIs), fall back to structural contour detection
+    console.log(`[AI Remove v6] Starting detection on ${loadedImage.width}x${loadedImage.height} image`);
     let hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height);
     let borderCoverage = getAlphaCoverage(hybridAlpha);
+    let usedStructural = false;
     if (borderCoverage < 0.02 || borderCoverage > 0.85) {
-      console.log(`[AI Remove] Black border coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
+      console.log(`[AI Remove v6] Black border coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
       hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
+      usedStructural = true;
     } else {
-      console.log(`[AI Remove] Black border detection: ${(borderCoverage*100).toFixed(1)}% coverage`);
+      console.log(`[AI Remove v6] Black border detection: ${(borderCoverage*100).toFixed(1)}% coverage — using border mask`);
     }
 
     // Store as imported AI mask so the rest of the pipeline works
     importedAiMaskAlpha = hybridAlpha;
-    importedAiMaskIsInternal = true; // skip binarization — internal mask has intentional soft edges
+    importedAiMaskIsInternal = !usedStructural; // only skip binarization for border mask (has soft edges)
     rebuildImportedAiMaskCanvas();
 
     // Set mode to AI with imported mask
