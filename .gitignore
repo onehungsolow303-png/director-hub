@@ -10,3 +10,11 @@ app.test.tmp
 *.tmp
 *.bak
 *.onnx
+__pycache__/
+test_screenshots/
+_temp_mask.png
+debug_mask.png
+proxy_mask.png
+test_*.png
+tests/reports/
+tests/golden/
