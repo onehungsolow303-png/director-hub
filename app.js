@@ -1364,6 +1364,16 @@ async function aiRemoveWorkflow() {
       aiRemoveStatus.style.color = "var(--accent)";
     }
 
+    // For dark backgrounds: auto-add keep boxes for common UI positions
+    // (top bar, bottom bar, icon strip). AI models often miss dark-toned
+    // UI elements that blend with scenic backgrounds.
+    const currentTone = bgTone ? bgTone.value : "dark";
+    if (currentTone === "dark" && manualKeepBoxes.length === 0) {
+      addPresetKeepBoxes("top");
+      addPresetKeepBoxes("bottom");
+      addPresetKeepBoxes("icons");
+    }
+
     // Auto-trigger Process Image
     await processBackgroundImage();
 
