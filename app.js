@@ -1295,6 +1295,373 @@ async function generateComfyuiMask() {
   }
 }
 
+// --- Structural Contour Detection Engine ---
+// Converts image to a tree of nested shapes (contour hierarchy).
+// UI elements form deep trees (panel > button > icon).
+// Scenery is flat (no containment). Based on Suzuki-Abe (1985).
+
+function findContoursWithHierarchy(binaryArray, w, h) {
+  // Suzuki-Abe border following algorithm.
+  // Input: Int16Array where 1 = foreground, 0 = background
+  // Output: array of {points, isHole, parent (id), id}
+  const F = new Int16Array(binaryArray);
+  let nbd = 1;
+  let lnbd = 1;
+  const contours = [];
+
+  // Clear borders
+  for (let i = 0; i < h; i += 1) { F[i * w] = 0; F[i * w + w - 1] = 0; }
+  for (let j = 0; j < w; j += 1) { F[j] = 0; F[(h - 1) * w + j] = 0; }
+
+  function neighborToIndex(i0, j0, id) {
+    const offsets = [[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1]];
+    return [i0 + offsets[id][0], j0 + offsets[id][1]];
+  }
+  function indexToNeighbor(i0, j0, i, j) {
+    const di = i - i0, dj = j - j0;
+    if (di===0&&dj===1) return 0; if (di===-1&&dj===1) return 1;
+    if (di===-1&&dj===0) return 2; if (di===-1&&dj===-1) return 3;
+    if (di===0&&dj===-1) return 4; if (di===1&&dj===-1) return 5;
+    if (di===1&&dj===0) return 6; if (di===1&&dj===1) return 7;
+    return -1;
+  }
+  function cwNon0(i0, j0, i, j, offset) {
+    const id = indexToNeighbor(i0, j0, i, j);
+    for (let k = 0; k < 8; k += 1) {
+      const kk = ((-k + id - offset) % 8 + 16) % 8;
+      const ij = neighborToIndex(i0, j0, kk);
+      if (ij[0] >= 0 && ij[0] < h && ij[1] >= 0 && ij[1] < w && F[ij[0] * w + ij[1]] !== 0) return ij;
+    }
+    return null;
+  }
+  function ccwNon0(i0, j0, i, j, offset) {
+    const id = indexToNeighbor(i0, j0, i, j);
+    for (let k = 0; k < 8; k += 1) {
+      const kk = ((k + id + offset) % 8 + 16) % 8;
+      const ij = neighborToIndex(i0, j0, kk);
+      if (ij[0] >= 0 && ij[0] < h && ij[1] >= 0 && ij[1] < w && F[ij[0] * w + ij[1]] !== 0) return ij;
+    }
+    return null;
+  }
+
+  for (let i = 1; i < h - 1; i += 1) {
+    lnbd = 1;
+    for (let j = 1; j < w - 1; j += 1) {
+      let i2 = 0, j2 = 0;
+      if (F[i * w + j] === 0) continue;
+
+      if (F[i * w + j] === 1 && F[i * w + (j - 1)] === 0) {
+        nbd += 1; i2 = i; j2 = j - 1;
+      } else if (F[i * w + j] >= 1 && F[i * w + j + 1] === 0) {
+        nbd += 1; i2 = i; j2 = j + 1;
+        if (F[i * w + j] > 1) lnbd = F[i * w + j];
+      } else {
+        if (F[i * w + j] !== 1) lnbd = Math.abs(F[i * w + j]);
+        continue;
+      }
+
+      const B = { points: [[j, i]], isHole: (j2 === j + 1), id: nbd, parent: -1 };
+      contours.push(B);
+
+      // Find parent based on lnbd
+      let B0 = null;
+      for (let c = 0; c < contours.length; c += 1) {
+        if (contours[c].id === lnbd) { B0 = contours[c]; break; }
+      }
+      if (B0) {
+        B.parent = B0.isHole
+          ? (B.isHole ? B0.parent : lnbd)
+          : (B.isHole ? lnbd : B0.parent);
+      }
+
+      const i1j1 = cwNon0(i, j, i2, j2, 0);
+      if (!i1j1) {
+        F[i * w + j] = -nbd;
+        if (F[i * w + j] !== 1) lnbd = Math.abs(F[i * w + j]);
+        continue;
+      }
+
+      let i1 = i1j1[0], j1 = i1j1[1];
+      i2 = i1; j2 = j1;
+      let i3 = i, j3 = j;
+
+      while (true) {
+        const i4j4 = ccwNon0(i3, j3, i2, j2, 1);
+        if (!i4j4) break;
+        const i4 = i4j4[0], j4 = i4j4[1];
+        contours[contours.length - 1].points.push([j4, i4]);
+
+        if (F[i3 * w + j3 + 1] === 0) F[i3 * w + j3] = -nbd;
+        else if (F[i3 * w + j3] === 1) F[i3 * w + j3] = nbd;
+
+        if (i4 === i && j4 === j && i3 === i1 && j3 === j1) {
+          if (F[i * w + j] !== 1) lnbd = Math.abs(F[i * w + j]);
+          break;
+        }
+        i2 = i3; j2 = j3; i3 = i4; j3 = j4;
+      }
+    }
+  }
+  return contours;
+}
+
+function computeContourFeatures(contour) {
+  const pts = contour.points;
+  if (pts.length < 3) return { area: 0, perimeter: 0, bbox: null, rectangularity: 0, circularity: 0 };
+
+  // Bounding box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+    minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+  }
+  const bboxW = maxX - minX + 1, bboxH = maxY - minY + 1;
+  const bboxArea = bboxW * bboxH;
+
+  // Area (Shoelace formula)
+  let area = 0;
+  for (let i = 0; i < pts.length; i += 1) {
+    const j = (i + 1) % pts.length;
+    area += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
+  }
+  area = Math.abs(area) / 2;
+
+  // Perimeter
+  let perimeter = 0;
+  for (let i = 0; i < pts.length; i += 1) {
+    const j = (i + 1) % pts.length;
+    perimeter += Math.sqrt((pts[j][0] - pts[i][0]) ** 2 + (pts[j][1] - pts[i][1]) ** 2);
+  }
+
+  const rectangularity = bboxArea > 0 ? area / bboxArea : 0;
+  const circularity = perimeter > 0 ? (4 * Math.PI * area) / (perimeter * perimeter) : 0;
+
+  return {
+    area, perimeter, rectangularity, circularity,
+    bbox: { left: minX, top: minY, right: maxX + 1, bottom: maxY + 1, width: bboxW, height: bboxH },
+    aspectRatio: bboxW / Math.max(1, bboxH)
+  };
+}
+
+function buildContourTree(contours, imageWidth, imageHeight) {
+  // Build tree from parent references, compute features, score for UI detection
+  const nodes = contours.map((c, i) => {
+    const features = computeContourFeatures(c);
+    return {
+      id: c.id, index: i, isHole: c.isHole, parentId: c.parent,
+      children: [], ...features, points: c.points,
+      depth: 0, uiScore: 0
+    };
+  });
+
+  // Build parent-child relationships
+  const idToNode = new Map();
+  for (const node of nodes) idToNode.set(node.id, node);
+  for (const node of nodes) {
+    if (node.parentId > 0 && idToNode.has(node.parentId)) {
+      idToNode.get(node.parentId).children.push(node);
+    }
+  }
+
+  // Compute depth
+  function setDepth(node, d) {
+    node.depth = d;
+    for (const child of node.children) setDepth(child, d + 1);
+  }
+  for (const node of nodes) {
+    if (node.parentId <= 0) setDepth(node, 0);
+  }
+
+  // Score each node for UI likelihood
+  for (const node of nodes) {
+    if (!node.bbox || node.area < 100) { node.uiScore = 0; continue; }
+    const wRatio = node.bbox.width / imageWidth;
+    const hRatio = node.bbox.height / imageHeight;
+
+    // Containment depth: children that also have children
+    let maxChildDepth = 0;
+    function getMaxDepth(n, d) {
+      if (d > maxChildDepth) maxChildDepth = d;
+      for (const c of n.children) getMaxDepth(c, d + 1);
+    }
+    getMaxDepth(node, 0);
+
+    // Sibling repetition: children with similar sizes
+    let similarSiblings = 0;
+    if (node.children.length >= 2) {
+      for (let a = 0; a < node.children.length; a += 1) {
+        for (let b = a + 1; b < node.children.length; b += 1) {
+          const ca = node.children[a], cb = node.children[b];
+          if (ca.bbox && cb.bbox) {
+            const wDiff = Math.abs(ca.bbox.width - cb.bbox.width) / Math.max(1, ca.bbox.width);
+            const hDiff = Math.abs(ca.bbox.height - cb.bbox.height) / Math.max(1, ca.bbox.height);
+            if (wDiff < 0.15 && hDiff < 0.15) similarSiblings += 1;
+          }
+        }
+      }
+    }
+
+    // Screen edge proximity
+    const edgeDist = Math.min(
+      node.bbox.left / imageWidth,
+      node.bbox.top / imageHeight,
+      (imageWidth - node.bbox.right) / imageWidth,
+      (imageHeight - node.bbox.bottom) / imageHeight
+    );
+    const edgeAffinity = edgeDist < 0.05 ? 1 : edgeDist < 0.15 ? 0.5 : 0;
+
+    // Composite score — require BOTH hierarchy depth AND rectangularity.
+    // Cave contours have depth but low rectangularity (<0.3).
+    // UI contours have depth AND high rectangularity (>0.6).
+    const depthScore = Math.min(maxChildDepth / 3, 1);
+    const rectScore = node.rectangularity;
+    // Penalize low rectangularity heavily — this is what separates UI from cave
+    const rectPenalty = rectScore < 0.4 ? 0.2 : rectScore < 0.6 ? 0.6 : 1.0;
+    node.uiScore =
+      0.25 * depthScore * rectPenalty +
+      0.35 * rectScore +
+      0.10 * (1 - Math.min(node.area / (imageWidth * imageHeight * 0.5), 1)) +
+      0.10 * Math.min(similarSiblings / 3, 1) +
+      0.10 * edgeAffinity +
+      0.10 * (node.children.length > 0 && rectScore > 0.5 ? 0.8 : 0);
+  }
+
+  return nodes;
+}
+
+function buildStructuralUiMask(sourceData, width, height, tone) {
+  // Convert image to binary edge map, find contours with hierarchy,
+  // score for UI, build alpha mask from high-scoring contours.
+
+  const edges = computeEdgeStrengthMap(sourceData);
+  const total = width * height;
+
+  // Create binary image from edge map (threshold + dilate for connectivity)
+  const binary = new Int16Array(total);
+  const edgeThreshold = 25;
+  for (let i = 0; i < total; i += 1) {
+    binary[i] = edges[i] >= edgeThreshold ? 1 : 0;
+  }
+  // Light dilation to close small gaps in borders
+  const dilated = new Int16Array(total);
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      if (binary[y * width + x]) { dilated[y * width + x] = 1; continue; }
+      if (binary[(y-1)*width+x] || binary[(y+1)*width+x] ||
+          binary[y*width+x-1] || binary[y*width+x+1]) {
+        dilated[y * width + x] = 1;
+      }
+    }
+  }
+
+  // Find contours with hierarchy
+  const contours = findContoursWithHierarchy(dilated, width, height);
+
+  // Build tree and score
+  const nodes = buildContourTree(contours, width, height);
+
+  // Collect UI regions: contours with high UI score AND sufficient size
+  const uiThreshold = 0.55;
+  const minArea = total * 0.005; // at least 0.5% of image
+  const alpha = new Uint8ClampedArray(total);
+
+  // Sort by area descending — larger regions first
+  const uiNodes = nodes
+    .filter(n => n.uiScore >= uiThreshold && n.area >= minArea && n.bbox)
+    .sort((a, b) => b.area - a.area);
+
+  // Fill UI regions into alpha mask
+  for (const node of uiNodes) {
+    const box = node.bbox;
+    for (let y = box.top; y < box.bottom && y < height; y += 1) {
+      for (let x = box.left; x < box.right && x < width; x += 1) {
+        alpha[y * width + x] = 255;
+      }
+    }
+  }
+
+  // Also keep the existing row density detection as a fallback/supplement
+  // for full-width bars that might not form closed contours
+  const rowDensity = new Float32Array(height);
+  for (let y = 0; y < height; y += 1) {
+    let cnt = 0;
+    for (let x = 0; x < width; x += 1) {
+      if (edges[y * width + x] >= 30) cnt += 1;
+    }
+    rowDensity[y] = cnt / width;
+  }
+  const sortedDensity = [...rowDensity].sort((a, b) => a - b);
+  const medianDensity = sortedDensity[Math.floor(height * 0.5)];
+  const densityThreshold = Math.max(0.04, medianDensity * 2.5);
+  for (let y = 0; y < height; y += 1) {
+    if (rowDensity[y] >= densityThreshold) {
+      for (let x = 0; x < width; x += 1) {
+        alpha[y * width + x] = 255;
+      }
+    }
+  }
+
+  // Refine: remove background-colored pixels in the center zone
+  const data = sourceData.data;
+  let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+  for (let y = Math.floor(height * 0.3); y < Math.floor(height * 0.6); y += 2) {
+    if (rowDensity[y] >= densityThreshold) continue;
+    for (let x = Math.floor(width * 0.3); x < Math.floor(width * 0.7); x += 2) {
+      const idx = (y * width + x) * 4;
+      bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2]; bgCount += 1;
+    }
+  }
+  if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
+  const colorThreshold = tone === "dark" ? 35 : 60;
+  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.68); y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (alpha[y * width + x] === 0) continue;
+      // Only clean center pixels, keep edges
+      if (x > width * 0.15 && x < width * 0.85) {
+        const idx = (y * width + x) * 4;
+        const dist = Math.sqrt((data[idx]-bgR)**2 + (data[idx+1]-bgG)**2 + (data[idx+2]-bgB)**2);
+        if (dist < colorThreshold) alpha[y * width + x] = 0;
+      }
+    }
+  }
+
+  // Disconnect thin vertical connectors
+  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.68); y += 1) {
+    let opaqueInRow = 0;
+    for (let x = 0; x < width; x += 1) {
+      if (alpha[y * width + x] > 0) opaqueInRow += 1;
+    }
+    if (opaqueInRow > 0 && opaqueInRow < width * 0.03) {
+      for (let x = 0; x < width; x += 1) alpha[y * width + x] = 0;
+    }
+  }
+
+  // Remove tiny fragments
+  const seen = new Uint8Array(total);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const idx = y * width + x;
+      if (seen[idx] || alpha[idx] === 0) continue;
+      const queue = [idx]; seen[idx] = 1;
+      let head = 0, count = 0;
+      const pixels = [];
+      while (head < queue.length) {
+        const ci = queue[head++]; count += 1; pixels.push(ci);
+        const cx = ci % width, cy = Math.floor(ci / width);
+        if (cx > 0)         { const ni = ci-1;     if (!seen[ni] && alpha[ni]>0) { seen[ni]=1; queue.push(ni); } }
+        if (cx < width-1)   { const ni = ci+1;     if (!seen[ni] && alpha[ni]>0) { seen[ni]=1; queue.push(ni); } }
+        if (cy > 0)         { const ni = ci-width;  if (!seen[ni] && alpha[ni]>0) { seen[ni]=1; queue.push(ni); } }
+        if (cy < height-1)  { const ni = ci+width;  if (!seen[ni] && alpha[ni]>0) { seen[ni]=1; queue.push(ni); } }
+      }
+      if (count < total * 0.002) {
+        for (const pi of pixels) alpha[pi] = 0;
+      }
+    }
+  }
+
+  return alpha;
+}
+
 // --- Hybrid Edge+Color UI Detection (no ComfyUI needed) ---
 
 function buildHybridUiMask(sourceData, width, height, tone) {
@@ -1516,7 +1883,8 @@ async function aiRemoveWorkflow() {
     const currentTone = bgTone ? bgTone.value : "dark";
 
     // Step 1: Generate mask using hybrid edge+color detection (no ComfyUI needed)
-    const hybridAlpha = buildHybridUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
+    // Use structural contour hierarchy detection (primary) with row density fallback
+    const hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
 
     // Store as imported AI mask so the rest of the pipeline works
     importedAiMaskAlpha = hybridAlpha;
