@@ -1529,6 +1529,438 @@ function buildContourTree(contours, imageWidth, imageHeight) {
   return nodes;
 }
 
+function buildBlackBorderUiMask(sourceData, width, height) {
+  // v5: Border-bounded background subtraction with inverted selection.
+  //
+  // The user's key insight: detect borders → set as boundaries → select
+  // objects → INVERT selection → delete inverted = remove background.
+  //
+  // Instead of scoring individual objects for "UI-ness" (which misses panels
+  // and includes artifacts), we identify the BACKGROUND and INVERT:
+  //   everything NOT background = UI selection.
+  //
+  // This eliminates random pixels because nothing outside a border-bounded
+  // region survives — the inversion deletes everything not explicitly selected.
+  //
+  // Pipeline:
+  //   Pass 1 — Color gradient map
+  //   Pass 2 — Border detection (gradient + dark achromatic outlines)
+  //   Pass 3 — Component labeling (regions between borders)
+  //   Pass 4 — Object metrics (color variance, shape, edge contact)
+  //   Pass 5 — Background identification (highest variance + most edges + largest)
+  //   Pass 6 — Mark ALL secondary background regions
+  //   Pass 7 — INVERT: selection = everything NOT background
+  //   Pass 8 — Build mask: selection + border pixels, delete everything else
+
+  const data = sourceData.data;
+  const total = width * height;
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 1: Color gradient map
+  // ══════════════════════════════════════════════════════════════════════
+
+  const gradient = new Float32Array(total);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const idx = y * width + x;
+      const off = idx * 4;
+      const r = data[off], g = data[off + 1], b = data[off + 2];
+      let maxDsq = 0;
+      if (x > 0)          { const n = off - 4;         const d = (r - data[n]) ** 2 + (g - data[n + 1]) ** 2 + (b - data[n + 2]) ** 2; if (d > maxDsq) maxDsq = d; }
+      if (x < width - 1)  { const n = off + 4;         const d = (r - data[n]) ** 2 + (g - data[n + 1]) ** 2 + (b - data[n + 2]) ** 2; if (d > maxDsq) maxDsq = d; }
+      if (y > 0)          { const n = off - width * 4;  const d = (r - data[n]) ** 2 + (g - data[n + 1]) ** 2 + (b - data[n + 2]) ** 2; if (d > maxDsq) maxDsq = d; }
+      if (y < height - 1) { const n = off + width * 4;  const d = (r - data[n]) ** 2 + (g - data[n + 1]) ** 2 + (b - data[n + 2]) ** 2; if (d > maxDsq) maxDsq = d; }
+      gradient[idx] = Math.sqrt(maxDsq);
+    }
+  }
+
+  // Adaptive threshold from histogram (moderate — between v3 low and v4 high)
+  const gradHist = new Uint32Array(256);
+  for (let i = 0; i < total; i += 1) gradHist[Math.min(255, Math.round(gradient[i]))] += 1;
+  let cumSum = 0, medianGrad = 0;
+  for (let i = 0; i < 256; i += 1) { cumSum += gradHist[i]; if (cumSum >= total * 0.5) { medianGrad = i; break; } }
+  const gradThreshold = Math.max(25, Math.min(50, medianGrad * 3));
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 2: Border detection
+  // Dual criteria — catches both color-code boundaries AND black outlines.
+  // Uses the PROVEN v3 approach (not v4's over-filtered structural borders).
+  // ══════════════════════════════════════════════════════════════════════
+
+  const edges = computeEdgeStrengthMap(sourceData);
+  const distToEdge = new Uint8Array(total);
+  distToEdge.fill(255);
+  for (let i = 0; i < total; i += 1) { if (edges[i] >= 35) distToEdge[i] = 0; }
+  for (let y = 1; y < height; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const idx = y * width + x;
+      if (distToEdge[idx] === 0) continue;
+      distToEdge[idx] = Math.min(distToEdge[idx], distToEdge[idx - 1] + 1, distToEdge[idx - width] + 1, distToEdge[idx - width - 1] + 1, distToEdge[idx - width + 1] + 1);
+    }
+  }
+  for (let y = height - 2; y >= 0; y -= 1) {
+    for (let x = width - 2; x >= 1; x -= 1) {
+      const idx = y * width + x;
+      if (distToEdge[idx] === 0) continue;
+      distToEdge[idx] = Math.min(distToEdge[idx], distToEdge[idx + 1] + 1, distToEdge[idx + width] + 1, distToEdge[idx + width + 1] + 1, distToEdge[idx + width - 1] + 1);
+    }
+  }
+
+  const isBorder = new Uint8Array(total);
+  for (let i = 0; i < total; i += 1) {
+    // Criterion A: color gradient exceeds threshold
+    if (gradient[i] >= gradThreshold) { isBorder[i] = 1; continue; }
+    // Criterion B: dark achromatic pixel near a contrast edge (black outlines)
+    const off = i * 4;
+    const maxCh = Math.max(data[off], data[off + 1], data[off + 2]);
+    if (maxCh < 55 && maxCh - Math.min(data[off], data[off + 1], data[off + 2]) <= 12 && distToEdge[i] <= 2) {
+      isBorder[i] = 1;
+    }
+  }
+  // Propagate dark borders through adjacent dark pixels (fills 2-4px outlines)
+  for (let pass = 0; pass < 2; pass += 1) {
+    const prev = new Uint8Array(isBorder);
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const idx = y * width + x;
+        if (isBorder[idx]) continue;
+        const off = idx * 4;
+        const maxCh = Math.max(data[off], data[off + 1], data[off + 2]);
+        if (maxCh >= 45 || maxCh - Math.min(data[off], data[off + 1], data[off + 2]) > 12) continue;
+        if (prev[idx - 1] || prev[idx + 1] || prev[idx - width] || prev[idx + width]) isBorder[idx] = 1;
+      }
+    }
+  }
+  // Remove tiny border fragments (< 15 connected)
+  const bSeen = new Uint8Array(total);
+  for (let i = 0; i < total; i += 1) {
+    if (bSeen[i] || !isBorder[i]) continue;
+    const comp = []; const bq = [i]; bSeen[i] = 1; let bh2 = 0;
+    while (bh2 < bq.length) {
+      const ci = bq[bh2++]; comp.push(ci);
+      const cx = ci % width, cy = (ci - cx) / width;
+      if (cx > 0          && isBorder[ci - 1]     && !bSeen[ci - 1])     { bSeen[ci - 1] = 1;     bq.push(ci - 1); }
+      if (cx < width - 1  && isBorder[ci + 1]     && !bSeen[ci + 1])     { bSeen[ci + 1] = 1;     bq.push(ci + 1); }
+      if (cy > 0          && isBorder[ci - width]  && !bSeen[ci - width]) { bSeen[ci - width] = 1; bq.push(ci - width); }
+      if (cy < height - 1 && isBorder[ci + width]  && !bSeen[ci + width]) { bSeen[ci + width] = 1; bq.push(ci + width); }
+    }
+    if (comp.length < 15) { for (const pi of comp) isBorder[pi] = 0; }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 2b: Border ENHANCEMENT — add pixels to detected borders
+  // Hysteresis: accept weaker gradient pixels IF they're adjacent to
+  // confirmed borders (like Canny edge detection's double threshold).
+  // Then bridge small gaps between border segments.
+  // Then validate: remove false enhancements not near real borders.
+  // ══════════════════════════════════════════════════════════════════════
+
+  const lowerThreshold = gradThreshold * 0.5;
+  let enhancedCount = 0;
+  // Hysteresis: 4 passes — weak gradient pixels adjacent to borders get promoted
+  for (let pass = 0; pass < 4; pass += 1) {
+    const prev = new Uint8Array(isBorder);
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const idx = y * width + x;
+        if (isBorder[idx]) continue;
+        if (gradient[idx] < lowerThreshold) continue;
+        if (prev[idx - 1] || prev[idx + 1] || prev[idx - width] || prev[idx + width]) {
+          isBorder[idx] = 1;
+          enhancedCount += 1;
+        }
+      }
+    }
+  }
+
+  // Gap bridging: connect border segments separated by ≤ 4px gaps
+  // Horizontal
+  for (let y = 0; y < height; y += 1) {
+    let lastX = -10;
+    for (let x = 0; x < width; x += 1) {
+      if (isBorder[y * width + x]) {
+        if (x - lastX > 1 && x - lastX <= 5) {
+          for (let bx = lastX + 1; bx < x; bx += 1) { isBorder[y * width + bx] = 1; enhancedCount += 1; }
+        }
+        lastX = x;
+      }
+    }
+  }
+  // Vertical
+  for (let x = 0; x < width; x += 1) {
+    let lastY = -10;
+    for (let y = 0; y < height; y += 1) {
+      if (isBorder[y * width + x]) {
+        if (y - lastY > 1 && y - lastY <= 5) {
+          for (let by = lastY + 1; by < y; by += 1) { isBorder[by * width + x] = 1; enhancedCount += 1; }
+        }
+        lastY = y;
+      }
+    }
+  }
+
+  // Refinement: validate enhanced pixels — remove those not near original borders
+  // (prevents noise from the lower threshold leaking into smooth areas)
+  const origBorder = new Uint8Array(bSeen); // bSeen marks pixels that were in original borders
+  for (let y = 2; y < height - 2; y += 1) {
+    for (let x = 2; x < width - 2; x += 1) {
+      const idx = y * width + x;
+      if (!isBorder[idx] || origBorder[idx]) continue; // skip original borders
+      // Check 5x5 neighborhood for original border pixels
+      let origNearby = 0;
+      for (let dy = -2; dy <= 2; dy += 1) {
+        for (let dx = -2; dx <= 2; dx += 1) {
+          if (origBorder[(y + dy) * width + (x + dx)]) origNearby += 1;
+        }
+      }
+      if (origNearby < 2) { isBorder[idx] = 0; enhancedCount -= 1; }
+    }
+  }
+
+  console.log(`[v5+] Border enhancement: +${enhancedCount} pixels (hysteresis + gap bridging)`);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 3: Component labeling (regions between borders)
+  // Borders are BOUNDARIES — regions can't cross them.
+  // ══════════════════════════════════════════════════════════════════════
+
+  const labels = new Int32Array(total);
+  let nextLabel = 1;
+  const objects = [];
+  for (let i = 0; i < total; i += 1) {
+    if (isBorder[i] || labels[i]) continue;
+    const obj = {
+      label: nextLabel, pixelCount: 0,
+      minX: width, maxX: 0, minY: height, maxY: 0,
+      touchesTop: false, touchesBottom: false, touchesLeft: false, touchesRight: false,
+      sumR: 0, sumG: 0, sumB: 0, sumR2: 0, sumG2: 0, sumB2: 0,
+      edgeSum: 0, // interior edge density (high = complex scene content, low = UI fill)
+      perimeterCount: 0, borderContactCount: 0
+    };
+    const q = [i]; labels[i] = nextLabel; let h = 0;
+    while (h < q.length) {
+      const ci = q[h++]; obj.pixelCount += 1;
+      const cx = ci % width, cy = (ci - cx) / width;
+      if (cx < obj.minX) obj.minX = cx; if (cx > obj.maxX) obj.maxX = cx;
+      if (cy < obj.minY) obj.minY = cy; if (cy > obj.maxY) obj.maxY = cy;
+      if (cy === 0) obj.touchesTop = true; if (cy === height - 1) obj.touchesBottom = true;
+      if (cx === 0) obj.touchesLeft = true; if (cx === width - 1) obj.touchesRight = true;
+      const off = ci * 4;
+      obj.sumR += data[off]; obj.sumG += data[off + 1]; obj.sumB += data[off + 2];
+      obj.sumR2 += data[off] ** 2; obj.sumG2 += data[off + 1] ** 2; obj.sumB2 += data[off + 2] ** 2;
+      obj.edgeSum += edges[ci]; // accumulate interior edge density
+      let isP = false, touchesB = false;
+      if (cx > 0)          { const ni = ci - 1;     if (isBorder[ni]) { isP = true; touchesB = true; } else if (!labels[ni]) { labels[ni] = nextLabel; q.push(ni); } } else { isP = true; }
+      if (cx < width - 1)  { const ni = ci + 1;     if (isBorder[ni]) { isP = true; touchesB = true; } else if (!labels[ni]) { labels[ni] = nextLabel; q.push(ni); } } else { isP = true; }
+      if (cy > 0)          { const ni = ci - width;  if (isBorder[ni]) { isP = true; touchesB = true; } else if (!labels[ni]) { labels[ni] = nextLabel; q.push(ni); } } else { isP = true; }
+      if (cy < height - 1) { const ni = ci + width;  if (isBorder[ni]) { isP = true; touchesB = true; } else if (!labels[ni]) { labels[ni] = nextLabel; q.push(ni); } } else { isP = true; }
+      if (isP) { obj.perimeterCount += 1; if (touchesB) obj.borderContactCount += 1; }
+    }
+    objects.push(obj); nextLabel += 1;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 4: Object metrics
+  // ══════════════════════════════════════════════════════════════════════
+
+  for (const obj of objects) {
+    const n = obj.pixelCount; if (n === 0) continue;
+    const mR = obj.sumR / n, mG = obj.sumG / n, mB = obj.sumB / n;
+    obj.colorVariance = Math.sqrt(Math.max(0, obj.sumR2 / n - mR * mR) + Math.max(0, obj.sumG2 / n - mG * mG) + Math.max(0, obj.sumB2 / n - mB * mB));
+    obj.rectangularity = n / ((obj.maxX - obj.minX + 1) * (obj.maxY - obj.minY + 1));
+    obj.borderContactRatio = obj.borderContactCount / Math.max(1, obj.perimeterCount);
+    obj.interiorEdgeDensity = obj.edgeSum / (n * 255); // normalized 0-1 (how much internal detail)
+    obj.edgeSides = (obj.touchesTop ? 1 : 0) + (obj.touchesBottom ? 1 : 0) + (obj.touchesLeft ? 1 : 0) + (obj.touchesRight ? 1 : 0);
+    obj.touchesEdge = obj.edgeSides > 0;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 5: Background identification
+  // Background = highest variance + most edge sides + largest size.
+  // ══════════════════════════════════════════════════════════════════════
+
+  let maxVar = 0, maxSize = 0;
+  for (const obj of objects) {
+    if (obj.colorVariance > maxVar) maxVar = obj.colorVariance;
+    if (obj.pixelCount > maxSize) maxSize = obj.pixelCount;
+  }
+  let bgLabel = -1, bestBgScore = -1;
+  for (const obj of objects) {
+    if (!obj.touchesEdge) continue;
+    const bgScore = 0.35 * (maxVar > 0 ? obj.colorVariance / maxVar : 0) +
+                    0.30 * (maxSize > 0 ? obj.pixelCount / maxSize : 0) +
+                    0.25 * (obj.edgeSides / 4) +
+                    0.10 * (1 - obj.rectangularity);
+    if (bgScore > bestBgScore) { bestBgScore = bgScore; bgLabel = obj.label; }
+  }
+  const bgObj = objects.find(o => o.label === bgLabel);
+  const bgColorVar = bgObj ? bgObj.colorVariance : 50;
+  const bgEdgeDensity = bgObj ? bgObj.interiorEdgeDensity : 0.1;
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 6: Mark ALL background-like regions (not just the primary one)
+  // Any edge-touching region with similar variance to background = also bg.
+  // ══════════════════════════════════════════════════════════════════════
+
+  const bgLabels = new Set();
+  if (bgLabel >= 0) bgLabels.add(bgLabel);
+
+  // Helper: check if a region has a UI-like shape (protects bars/panels from bg classification)
+  // Must have BOTH UI-like geometry AND UI-like content (low variance or low edge density).
+  // High-variance, high-edge-density regions with bar-like shapes are scene strips, not UI.
+  function hasUiShape(obj) {
+    const bw = obj.maxX - obj.minX + 1, bh = obj.maxY - obj.minY + 1;
+    const wR = bw / width, hR = bh / height, asp = bw / Math.max(1, bh);
+    const geoMatch = (asp >= 3 && hR <= 0.25) ||          // thin horizontal bar
+                     (wR >= 0.4 && hR <= 0.40) ||          // wide bar
+                     (wR <= 0.25 && hR <= 0.25 && wR >= 0.05) || // compact square panel
+                     (obj.rectangularity >= 0.55);          // highly rectangular
+    if (!geoMatch) return false;
+    // Content check: UI has low variance OR low interior detail relative to background
+    if (obj.colorVariance < bgColorVar * 0.55) return true;           // low variance = UI fill
+    if (obj.interiorEdgeDensity < bgEdgeDensity * 0.60) return true;  // smooth interior = UI
+    // Edge-touching regions get extra protection — UI bars anchor to image edges
+    if (obj.touchesEdge) return true;
+    // Both high variance AND high edge density AND not edge-touching = scene content
+    return false;
+  }
+
+  for (const obj of objects) {
+    if (bgLabels.has(obj.label)) continue;
+
+    // PROTECT UI-shaped regions — never classify as secondary background
+    if (hasUiShape(obj)) continue;
+
+    // Large, high-variance, edge-touching → secondary background
+    if (obj.touchesEdge && obj.colorVariance > bgColorVar * 0.65 && obj.pixelCount > total * 0.01) {
+      bgLabels.add(obj.label);
+    }
+    // Very small fragments touching edge with high variance → background noise
+    if (obj.touchesEdge && obj.pixelCount < total * 0.003 && obj.colorVariance > bgColorVar * 0.5) {
+      bgLabels.add(obj.label);
+    }
+    // Non-edge-touching game content fragments (expanded: up to 3% of image)
+    if (!obj.touchesEdge && obj.colorVariance > bgColorVar * 0.6 && obj.pixelCount < total * 0.03 && obj.rectangularity < 0.45) {
+      bgLabels.add(obj.label);
+    }
+  }
+
+  // ── Trapped background detector ──
+  // Enclosed regions (don't touch edge) that score on MULTIPLE background
+  // signals are game scene content trapped between UI panels.
+  // Large trapped regions (>2%) need only 2 signals. Smaller need 3.
+  let trappedCount = 0;
+  for (const obj of objects) {
+    if (bgLabels.has(obj.label)) continue;
+    if (obj.touchesEdge) continue;
+    if (obj.pixelCount < total * 0.002) continue;
+
+    // Protect UI-shaped regions from trapped bg classification too
+    if (hasUiShape(obj)) continue;
+
+    let bgSignals = 0;
+    if (obj.colorVariance > bgColorVar * 0.45) bgSignals += 1;     // high variance
+    if (obj.rectangularity < 0.45) bgSignals += 1;                  // irregular or moderate shape
+    if (obj.interiorEdgeDensity > bgEdgeDensity * 0.50) bgSignals += 1; // complex interior
+    if (obj.borderContactRatio < 0.60) bgSignals += 1;              // not strongly bordered
+
+    // Large trapped regions (>1% of image) need fewer signals — they're almost certainly scene
+    const minSignals = obj.pixelCount > total * 0.01 ? 2 : 3;
+
+    if (bgSignals >= minSignals) {
+      bgLabels.add(obj.label);
+      trappedCount += 1;
+    }
+  }
+  if (trappedCount > 0) console.log(`[v5+] Trapped background: ${trappedCount} enclosed regions identified as scene content`);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 7: INVERT SELECTION
+  // Selection = everything NOT background. This is the core of the
+  // "select objects → invert → delete background" workflow.
+  // No per-object scoring threshold — if it's not background, it's UI.
+  // Small fragments cleaned up after.
+  // ══════════════════════════════════════════════════════════════════════
+
+  const selection = new Uint8Array(total);
+  for (let i = 0; i < total; i += 1) {
+    if (labels[i] > 0 && !bgLabels.has(labels[i])) selection[i] = 1;
+  }
+  // Also include border pixels between two selected regions or adjacent to selection
+  for (let i = 0; i < total; i += 1) {
+    if (!isBorder[i] || selection[i]) continue;
+    const cx = i % width, cy = (i - cx) / width;
+    let adjSelected = 0, adjBg = 0;
+    if (cx > 0)          { if (selection[i - 1]) adjSelected++; else if (labels[i - 1] > 0 && bgLabels.has(labels[i - 1])) adjBg++; }
+    if (cx < width - 1)  { if (selection[i + 1]) adjSelected++; else if (labels[i + 1] > 0 && bgLabels.has(labels[i + 1])) adjBg++; }
+    if (cy > 0)          { if (selection[i - width]) adjSelected++; else if (labels[i - width] > 0 && bgLabels.has(labels[i - width])) adjBg++; }
+    if (cy < height - 1) { if (selection[i + width]) adjSelected++; else if (labels[i + width] > 0 && bgLabels.has(labels[i + width])) adjBg++; }
+    // Include border if it touches selected AND doesn't only face background
+    if (adjSelected > 0 && adjSelected >= adjBg) selection[i] = 1;
+  }
+  // Propagate through border pixels connected to selection (captures full border thickness)
+  const selBorderQ = [];
+  for (let i = 0; i < total; i += 1) {
+    if (selection[i] && isBorder[i]) selBorderQ.push(i);
+  }
+  let sbh = 0;
+  const selBorderDepth = new Uint8Array(total);
+  while (sbh < selBorderQ.length) {
+    const ci = selBorderQ[sbh++];
+    if (selBorderDepth[ci] >= 6) continue;
+    const cx = ci % width, cy = (ci - cx) / width;
+    const nd = selBorderDepth[ci] + 1;
+    if (cx > 0          && isBorder[ci - 1]     && !selection[ci - 1])     { selection[ci - 1] = 1;     selBorderDepth[ci - 1] = nd;     selBorderQ.push(ci - 1); }
+    if (cx < width - 1  && isBorder[ci + 1]     && !selection[ci + 1])     { selection[ci + 1] = 1;     selBorderDepth[ci + 1] = nd;     selBorderQ.push(ci + 1); }
+    if (cy > 0          && isBorder[ci - width]  && !selection[ci - width]) { selection[ci - width] = 1; selBorderDepth[ci - width] = nd; selBorderQ.push(ci - width); }
+    if (cy < height - 1 && isBorder[ci + width]  && !selection[ci + width]) { selection[ci + width] = 1; selBorderDepth[ci + width] = nd; selBorderQ.push(ci + width); }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PASS 8: Build mask — delete everything outside selection
+  // The inverted selection (background) is cut out.
+  // Then remove tiny remaining fragments.
+  // ══════════════════════════════════════════════════════════════════════
+
+  const alpha = new Uint8ClampedArray(total);
+  for (let i = 0; i < total; i += 1) {
+    if (selection[i]) alpha[i] = 255;
+  }
+
+  // Remove tiny fragments (< 0.2% of image)
+  const seen = new Uint8Array(total);
+  const minFrag = total * 0.002;
+  for (let i = 0; i < total; i += 1) {
+    if (seen[i] || !alpha[i]) continue;
+    const comp = []; const q2 = [i]; seen[i] = 1; let h2 = 0;
+    while (h2 < q2.length) {
+      const ci = q2[h2++]; comp.push(ci);
+      const cx = ci % width, cy = (ci - cx) / width;
+      if (cx > 0          && !seen[ci - 1]     && alpha[ci - 1])     { seen[ci - 1] = 1;     q2.push(ci - 1); }
+      if (cx < width - 1  && !seen[ci + 1]     && alpha[ci + 1])     { seen[ci + 1] = 1;     q2.push(ci + 1); }
+      if (cy > 0          && !seen[ci - width]  && alpha[ci - width]) { seen[ci - width] = 1; q2.push(ci - width); }
+      if (cy < height - 1 && !seen[ci + width]  && alpha[ci + width]) { seen[ci + width] = 1; q2.push(ci + width); }
+    }
+    if (comp.length < minFrag) { for (const pi of comp) alpha[pi] = 0; }
+  }
+
+  const kept = alpha.reduce((s, a) => s + (a > 0 ? 1 : 0), 0);
+  const bgCount = [...bgLabels].reduce((s, l) => s + (objects.find(o => o.label === l) || { pixelCount: 0 }).pixelCount, 0);
+  console.log(`[v5 InvertSelect] thresh=${gradThreshold}, objects=${objects.length}, ` +
+    `bgRegions=${bgLabels.size} (${(bgCount / total * 100).toFixed(1)}% of image), ` +
+    `selected=${objects.length - bgLabels.size}, coverage=${(kept / total * 100).toFixed(1)}%`);
+  // Log what was classified as background vs UI
+  const sorted = [...objects].sort((a, b) => b.pixelCount - a.pixelCount).slice(0, 12);
+  for (const o of sorted) {
+    if (o.pixelCount < total * 0.001) continue;
+    const tag = bgLabels.has(o.label) ? 'BG' : 'UI';
+    console.log(`  L${o.label} [${tag}]: sz=${(o.pixelCount / total * 100).toFixed(1)}% ` +
+      `cVar=${o.colorVariance.toFixed(0)} rect=${o.rectangularity.toFixed(2)} edges=${o.edgeSides} ` +
+      `bContact=${o.borderContactRatio.toFixed(2)} edgeDens=${o.interiorEdgeDensity.toFixed(3)}`);
+  }
+  return alpha;
+}
+
 function buildStructuralUiMask(sourceData, width, height, tone) {
   // Convert image to binary edge map, find contours with hierarchy,
   // score for UI, build alpha mask from high-scoring contours.
@@ -1662,198 +2094,8 @@ function buildStructuralUiMask(sourceData, width, height, tone) {
   return alpha;
 }
 
-// --- Hybrid Edge+Color UI Detection (no ComfyUI needed) ---
+// (buildHybridUiMask removed — 187 lines of dead code, superseded by v5)
 
-function buildHybridUiMask(sourceData, width, height, tone) {
-  // Custom border + object detection for game UI extraction.
-  // Scans row/column edge density to find horizontal bars and side panels.
-
-  const edges = computeEdgeStrengthMap(sourceData);
-  const data = sourceData.data;
-  const total = width * height;
-  const edgeThreshold = 30;
-
-  // Phase 1: Row-based edge density scan.
-  const rowDensity = new Float32Array(height);
-  for (let y = 0; y < height; y += 1) {
-    let edgeCount = 0;
-    for (let x = 0; x < width; x += 1) {
-      if (edges[y * width + x] >= edgeThreshold) edgeCount += 1;
-    }
-    rowDensity[y] = edgeCount / width;
-  }
-
-  // Phase 2: Column-based edge density scan (for side panels).
-  const colDensity = new Float32Array(width);
-  for (let x = 0; x < width; x += 1) {
-    let edgeCount = 0;
-    for (let y = 0; y < height; y += 1) {
-      if (edges[y * width + x] >= edgeThreshold) edgeCount += 1;
-    }
-    colDensity[x] = edgeCount / height;
-  }
-
-  // Phase 3: Find UI bands — contiguous groups of rows with high edge density.
-  // Smooth the density signal to avoid single-row gaps breaking bands.
-  const smoothed = new Float32Array(height);
-  const smoothRadius = 3;
-  for (let y = 0; y < height; y += 1) {
-    let sum = 0, count = 0;
-    for (let dy = -smoothRadius; dy <= smoothRadius; dy += 1) {
-      const ny = y + dy;
-      if (ny >= 0 && ny < height) { sum += rowDensity[ny]; count += 1; }
-    }
-    smoothed[y] = sum / count;
-  }
-
-  // A row is "UI-like" if its smoothed edge density exceeds the threshold.
-  // Use an adaptive threshold: median density + a boost.
-  const sortedDensity = [...smoothed].sort((a, b) => a - b);
-  const medianDensity = sortedDensity[Math.floor(height * 0.5)];
-  const densityThreshold = Math.max(0.04, medianDensity * 2.5);
-
-  // Find bands of UI rows
-  const isUiRow = new Uint8Array(height);
-  for (let y = 0; y < height; y += 1) {
-    isUiRow[y] = smoothed[y] >= densityThreshold ? 1 : 0;
-  }
-
-  // Merge nearby bands (gap <= 8 rows) to connect UI bars with thin gaps
-  for (let y = 1; y < height; y += 1) {
-    if (isUiRow[y] === 0 && isUiRow[y - 1] === 1) {
-      // Check if there's another UI row within 8 rows ahead
-      for (let ahead = 1; ahead <= 8 && y + ahead < height; ahead += 1) {
-        if (isUiRow[y + ahead] === 1) {
-          for (let fill = 0; fill < ahead; fill += 1) isUiRow[y + fill] = 1;
-          break;
-        }
-      }
-    }
-  }
-
-  // Phase 4: Similarly for columns — find dense vertical strips (side panels)
-  const smoothedCol = new Float32Array(width);
-  for (let x = 0; x < width; x += 1) {
-    let sum = 0, count = 0;
-    for (let dx = -smoothRadius; dx <= smoothRadius; dx += 1) {
-      const nx = x + dx;
-      if (nx >= 0 && nx < width) { sum += colDensity[nx]; count += 1; }
-    }
-    smoothedCol[x] = sum / count;
-  }
-  const colThreshold = Math.max(0.06, medianDensity * 3);
-  const isUiCol = new Uint8Array(width);
-  for (let x = 0; x < width; x += 1) {
-    // Only mark columns at screen edges (leftmost/rightmost 15%)
-    if (x < width * 0.15 || x > width * 0.85) {
-      isUiCol[x] = smoothedCol[x] >= colThreshold ? 1 : 0;
-    }
-  }
-  // Merge nearby column bands
-  for (let x = 1; x < width; x += 1) {
-    if (isUiCol[x] === 0 && isUiCol[x - 1] === 1) {
-      for (let ahead = 1; ahead <= 8 && x + ahead < width; ahead += 1) {
-        if (isUiCol[x + ahead] === 1) {
-          for (let fill = 0; fill < ahead; fill += 1) isUiCol[x + fill] = 1;
-          break;
-        }
-      }
-    }
-  }
-
-  // Phase 5: Build alpha mask from detected bands.
-  const alpha = new Uint8ClampedArray(total);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (isUiRow[y] || isUiCol[x]) {
-        alpha[y * width + x] = 255;
-      }
-    }
-  }
-
-  // Phase 6: Within detected bands, refine using color distance from center.
-  // The bands include the full width but the CENTER of the image is scene,
-  // not UI. Remove center pixels that match the background color.
-  // Sample background from the center of non-UI rows.
-  let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
-  for (let y = Math.floor(height * 0.3); y < Math.floor(height * 0.6); y += 2) {
-    if (isUiRow[y]) continue; // skip UI rows
-    for (let x = Math.floor(width * 0.3); x < Math.floor(width * 0.7); x += 2) {
-      const idx = (y * width + x) * 4;
-      bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2];
-      bgCount += 1;
-    }
-  }
-  if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
-
-  // For pixels in UI rows that are far from the top/bottom edges,
-  // check if they look like background and remove them.
-  const colorThreshold = tone === "dark" ? 35 : 60;
-  for (let y = 0; y < height; y += 1) {
-    if (!isUiRow[y]) continue;
-    // Only refine rows that are in the "middle" zone (not top/bottom bars)
-    const yRatio = y / height;
-    if (yRatio > 0.10 && yRatio < 0.70) {
-      for (let x = 0; x < width; x += 1) {
-        if (isUiCol[x]) continue; // keep side panel columns
-        const idx = (y * width + x) * 4;
-        const dist = Math.sqrt(
-          (data[idx] - bgR) ** 2 + (data[idx + 1] - bgG) ** 2 + (data[idx + 2] - bgB) ** 2
-        );
-        if (dist < colorThreshold) {
-          alpha[y * width + x] = 0; // looks like background
-        }
-      }
-    }
-  }
-
-  // Phase 7: Disconnect UI bands — find rows where only a thin vertical
-  // strip connects the top bar to the bottom bar, and zero those rows.
-  // This allows split panel detection to find individual UI elements.
-  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.68); y += 1) {
-    let opaqueInRow = 0;
-    for (let x = 0; x < width; x += 1) {
-      if (alpha[y * width + x] > 0) opaqueInRow += 1;
-    }
-    // If less than 3% of the row is opaque, it's a thin connector — zero it
-    if (opaqueInRow > 0 && opaqueInRow < width * 0.03) {
-      for (let x = 0; x < width; x += 1) {
-        alpha[y * width + x] = 0;
-      }
-    }
-  }
-
-  // Phase 8: Remove tiny isolated fragments
-  const seen = new Uint8Array(total);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const startIdx = y * width + x;
-      if (seen[startIdx] || alpha[startIdx] === 0) continue;
-      const queue = [startIdx];
-      seen[startIdx] = 1;
-      let head = 0;
-      let count = 0;
-      const pixels = [];
-      while (head < queue.length) {
-        const ci = queue[head++];
-        count += 1;
-        pixels.push(ci);
-        const cx = ci % width, cy = Math.floor(ci / width);
-        if (cx > 0)          { const ni = ci - 1;     if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-        if (cx < width - 1)  { const ni = ci + 1;     if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-        if (cy > 0)          { const ni = ci - width;  if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-        if (cy < height - 1) { const ni = ci + width;  if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-      }
-      if (count < total * 0.002) {
-        for (const pi of pixels) alpha[pi] = 0;
-      }
-    }
-  }
-
-  return alpha;
-}
-
-// --- AI Remove (one-click workflow) ---
 
 async function aiRemoveWorkflow() {
   // Turn off batch mode if active — AI Remove works on single images
@@ -1882,9 +2124,16 @@ async function aiRemoveWorkflow() {
     const sourceData = sourceCanvas.getContext("2d").getImageData(0, 0, loadedImage.width, loadedImage.height);
     const currentTone = bgTone ? bgTone.value : "dark";
 
-    // Step 1: Generate mask using hybrid edge+color detection (no ComfyUI needed)
-    // Use structural contour hierarchy detection (primary) with row density fallback
-    const hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
+    // Step 1: Generate mask — try black border detection first (exploits thin dark
+    // outlines common to game UIs), fall back to structural contour detection
+    let hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height);
+    let borderCoverage = getAlphaCoverage(hybridAlpha);
+    if (borderCoverage < 0.02 || borderCoverage > 0.85) {
+      console.log(`[AI Remove] Black border coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
+      hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
+    } else {
+      console.log(`[AI Remove] Black border detection: ${(borderCoverage*100).toFixed(1)}% coverage`);
+    }
 
     // Store as imported AI mask so the rest of the pipeline works
     importedAiMaskAlpha = hybridAlpha;
@@ -3068,10 +3317,11 @@ function classifyPanelFromBox(box, width, height, sourceType = "auto") {
   const heightRatio = boxHeight / Math.max(1, height);
   const aspect = boxWidth / Math.max(1, boxHeight);
   const isThinHorizontal = aspect >= 4 && heightRatio <= 0.18;
-  const isWideBar = widthRatio >= 0.5 && heightRatio <= 0.35; // game UI bars spanning most of width
+  const isWideBar = widthRatio >= 0.5 && heightRatio <= 0.35;
   const isThinVertical = aspect <= 0.35 && widthRatio <= 0.16;
-  const isCompactPanel = widthRatio >= 0.1 && widthRatio <= 0.75 && heightRatio >= 0.08 && heightRatio <= 0.45;
-  const likelyUi = sourceType !== "auto" || isThinHorizontal || isWideBar || isThinVertical || isCompactPanel;
+  const isCompactPanel = widthRatio >= 0.1 && heightRatio >= 0.08 && heightRatio <= 0.55;
+  const isLargePanel = widthRatio >= 0.3 && heightRatio >= 0.15;
+  const likelyUi = sourceType !== "auto" || isThinHorizontal || isWideBar || isThinVertical || isCompactPanel || isLargePanel;
   let label = "Likely UI asset";
   if (sourceType === "keep-box") label = "Protected UI box";
   else if (sourceType === "brush") label = "Brushed UI detail";
@@ -3725,11 +3975,11 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
     applySpillSuppression(resultData, alpha, backgroundSamples, settings.aiSpill);
   }
   if (settings.decontaminate) {
-    const cleanupPasses = settings.edgeCleanupStrength >= 80
-      ? 3
-      : settings.edgeCleanupStrength >= 45
-        ? 2
-        : 1;
+    const isAiDetectedMask = !!(importedAiMaskAlpha);
+    const cleanupPasses = isAiDetectedMask ? 1
+      : settings.edgeCleanupStrength >= 80 ? 3
+      : settings.edgeCleanupStrength >= 45 ? 2
+      : 1;
     for (let pass = 0; pass < cleanupPasses; pass += 1) {
       defringeImageData(resultData, backgroundSamples[0]);
       scrubBrightSpecks(resultData, backgroundSamples[0]);
