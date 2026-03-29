@@ -1,116 +1,110 @@
-# CLAUDE.md
+# CLAUDE.md — Game UI Asset Extraction Tool
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Mission
+
+Cleanly cut out game UI elements from screenshots. Keep borders intact, keep size/position/resolution the same, remove background, leave UI on transparent background.
+
+## Mandatory Workflow (every task)
+
+1. **Read memory** — Check `what-worked.md` rule and memory files before acting
+2. **Plan** — Outline approach before writing code
+3. **Delegate** — Use specialized agents for matching tasks
+4. **Verify** — Test with screenshots, compare to reference images
+5. **Update** — Update memory and `what-worked.md` with outcomes
+
+See `.claude/rules/project-workflow.md` for full details.
+
+## Agent Hierarchy
+
+```
+CEO (prompt optimizer + strategic researcher — sits above master)
+  │   Researches web + memory → compiles optimized prompts → dispatches master
+  │   Enforces: originality rules, web security, prompt injection defense
+  │
+  └── MASTER (loop orchestrator — receives optimized prompt, delegates)
+        ├── research-advisor   — memory audit, comparative analysis, advises master
+        ├── driver             — creates delegation plans, assigns worker tasks
+        │     ├── extraction-analyst (worker — detection pipeline code changes, original code only)
+        │     ├── quality-checker    (worker — output vs reference comparison)
+        │     └── test-runner        (worker — Playwright visual testing, pytest suite)
+        └── master spawns workers per driver's delegation plan
+```
+
+**Master workflow**: Prompt → research-advisor → plan → driver → spawn workers → review → update memory
+
+| Agent | Role | Model | Writes code? |
+|---|---|---|---|
+| `ceo` | Prompt optimizer, web researcher, security enforcer | opus | No (prompts/rules/memory only) |
+| `master` | Orchestrator — research, plan, delegate | opus | No |
+| `research-advisor` | Memory + rules audit, comparative analysis | opus | No |
+| `driver` | Delegation planning, worker assignment | sonnet | No |
+| `extraction-analyst` | Worker — detection pipeline, parameters (original code) | opus | Yes |
+| `quality-checker` | Worker — output vs reference comparison | sonnet | No |
+| `test-runner` | Worker — Playwright screenshots, pytest suite | sonnet | No |
+
+Master spawns all agents (Claude Code limitation: subagents cannot spawn sub-subagents).
+
+## Project Rules (in `.claude/rules/`)
+
+| Rule file | Scope | Enforces |
+|---|---|---|
+| `project-workflow.md` | All files | Check memory, compare references, update memory |
+| `extraction-engine.md` | app.js | v5+ architecture, parameters, what worked/failed |
+| `code-quality.md` | JS/PY/HTML/CSS | Syntax checks, no blind edits, preserve quality |
+| `what-worked.md` | All files | Living history of approaches and outcomes |
 
 ## Primary Stack
 
-JavaScript (vanilla, no bundler), HTML/CSS, Python. Always verify the current state of UI code before editing — no blind modifications.
+JavaScript (vanilla, no bundler), HTML/CSS, Python.
 
-## Development Commands
+## Dev Commands
 
-**Run the dev server:**
 ```bash
-python serve.py
-# Serves at http://127.0.0.1:8080
+python serve.py              # Dev server at http://127.0.0.1:8080
+python screenshot.py [url]   # Playwright visual testing
 ```
 
-**Visual testing (Playwright screenshots):**
-```bash
-python screenshot.py [url] [output_path] [click_selector]
-```
-
-**Batch background removal:**
-```powershell
-$env:PYTHONPATH="C:\Dev\Image generator\.venv\Lib\site-packages"
-& python "C:\Dev\Image generator\scripted\remove_black_bg.py" --input-dir <dir> --output-dir <dir> --preset ui-soft
-# Presets: ui-balanced, ui-soft, ui-hard
-```
-
-The app also opens directly in the browser via `index.html` — the Python server is only needed for ComfyUI CORS proxying and the `/save-mask` endpoint.
+App also opens directly via `index.html` — server only needed for ComfyUI proxy.
 
 ## Architecture
 
-The app is a browser-based game UI asset extraction tool. Core files:
+- **`index.html`** — Two-tab layout: Extraction + Workflow Builder
+- **`app.js`** — All logic (~5800 lines, vanilla JS)
+- **`styles.css`** — Dark theme, CSS Grid
+- **`serve.py`** — HTTP server + CORS proxy + `/save-mask`
 
-- **`index.html`** — Two-tab layout: Extraction tab and Workflow Builder tab
-- **`app.js`** — All application logic (~4000 lines, vanilla JS, no bundler)
-- **`styles.css`** — Dark theme, CSS Grid layout
-- **`serve.py`** — Dev HTTP server + CORS proxy to ComfyUI + `/save-mask` endpoint
+### Detection Engine (v5+ invert-selection)
 
-### Extraction Pipeline (app.js)
+`buildBlackBorderUiMask()` in app.js — primary detection path:
+1. Color gradient map → 2. Border detection (gradient + dark achromatic) → 3. Border enhancement (hysteresis + gap bridging) → 4. Component labeling → 5. Metrics → 6. Background by variance → 7. Trapped bg detection → 8. INVERT selection → 9. Build mask
 
-Extraction runs entirely in the browser using HTML5 Canvas pixel manipulation — no external image libraries. The pipeline has four modes selected by the user: `remove`, `crop`, `multi`, `ai`.
+Fallback: `buildStructuralUiMask()` if coverage outside 2-85%.
 
-**Layered mask system** — three independent alpha sources that can be combined:
-1. `importedAiMaskAlpha` — external high-quality mask imported from ComfyUI or file
-2. `processedMaskCanvas/Alpha` — heuristic-generated mask from the active extraction mode
-3. `manualMaskCanvas` — brush corrections painted by the user
+See `.claude/rules/extraction-engine.md` for full parameter documentation.
 
-Key pipeline functions:
-- `processBackgroundRemoval()` — main entry point for extraction
-- `buildAlphaData()` — flood-fill based alpha generation from background samples
-- `refineAlphaData()` — secondary polish pass
-- `applyManualCorrectionsToAlpha()` — merges keep/subtract points, boxes, and brush strokes
-- `findMaskComponentBoxes()` — detects separated components for the split gallery
-- `buildProcessedBackgroundFromAlpha()` — final compositing
+### Quality References
 
-**Manual correction tools** accumulate and never overwrite each other: background sample points (up to 6), keep points (up to 12), keep boxes (up to 24), subtract boxes, and brush strokes with undo.
+- Dark: `input/Example quality image extraction/Dark background examples/`
+- Light: `input/Example quality image extraction/Light background examples/`
 
-**Split gallery** auto-detects separated panels from the mask, sorts by size/usefulness, and lets the user promote any panel to the main result.
-
-### ComfyUI Integration
-
-`serve.py` proxies requests to the ComfyUI server to avoid CORS. The browser:
-1. Builds a workflow JSON from the Workflow Builder tab (or starter templates)
-2. POSTs to ComfyUI via the proxy
-3. Polls for completion
-4. Downloads generated masks via `/save-mask`
-
-Starter workflow templates: `starter-workflow-*.json` (three presets for background removal, Juggernaut XL, and pixel UI).
-
-Supported segmentation model packs: BiRefNet, RMBG, InSPyReNet, BEN2 (configured via `removers` map in app.js).
-
-### Browser AI (ONNX Runtime)
-
-When ComfyUI is unavailable, the app can load a local U2-Net ONNX model and run inference in-browser as a fallback.
-
-## Architecture Planning
-
-For multi-step AI pipelines (detect → segment → extract), **always propose the full architecture and get user confirmation BEFORE implementing**. Never assume a single-pass approach when the user describes multiple stages. Outline each step with expected inputs/outputs and potential pitfalls.
-
-When debugging, use the `/debug` skill for structured diagnosis.
-
-## Image Processing Guidelines
-
-- Always test canvas/image operations with a minimal example first before building the full pipeline.
-- Watch for canvas tainting from cross-origin images — use the proxy or OffscreenCanvas.
-- Alpha channel handling: explicitly verify mask polarity (0=transparent vs 0=opaque) at each stage.
-- When working with masks, log dimensions, value ranges, and channel count before processing.
+Always compare extraction results to these.
 
 ## Key Constraints
 
-- **Full-sheet layout is the primary output** — do not optimize for cropped assets at the expense of the full sheet result.
-- **Manual correction tools must remain accessible** — never hide them behind AI-only flows.
-- **Preserve UI asset quality above all** — background removal must not destroy ornate UI details.
-- After any code change, check for secondary regressions before finishing. (Syntax errors are caught automatically by PostToolUse hooks.)
-- Use `screenshot.py` / Playwright to verify visual UI changes — do not edit CSS/HTML without visual confirmation.
+- **Full-sheet layout is primary output**
+- **Preserve UI asset quality above all** — don't destroy ornate details
+- **Manual correction tools must remain accessible**
+- **UI borders are 15-85px textured frames**, not thin black lines
 
-## Configured Features (.claude/settings.json)
+## Hooks (automatic enforcement)
 
-### Hooks
-- **Model file protection** — PreToolUse hook blocks edits to `.onnx`, `.safetensors`, `.pth`, `.bin`, `.pt` files.
-- **Post-edit checks** — Single PostToolUse hook: screenshot reminder for HTML/CSS, `node --check` for JS, `py_compile` for Python.
+- **PreToolUse**: Blocks editing model files (.onnx, .safetensors, .pth, .bin, .pt)
+- **PostToolUse**: Syntax validation (node --check / py_compile), screenshot reminders
+- **UserPromptSubmit**: Injects project rules and memory context
 
-### Environment Variables
-- `COMFYUI_URL` = `http://127.0.0.1:8000` (ComfyUI backend)
-- `APP_URL` = `http://127.0.0.1:8080` (dev server)
+## Skills
 
-### Permissions
-Pre-approved: file reads/writes/edits, glob/grep, serve.py, screenshot.py, curl to localhost, git commands.
-Blocked: `rm -rf`, `git push --force`, `git reset --hard`.
-
-## Useful Skills
-
-- **`/debug`** — Structured debugging: reproduce → isolate → identify root cause → minimal fix → verify → check adjacents. Use this instead of speculative fixing.
-- **`/simplify`** — Run after refactoring to catch redundancy in app.js canvas code.
-- **`/loop 2m <prompt>`** — Poll ComfyUI status or monitor extraction jobs while working.
+- `/debug` — Structured debugging (reproduce → isolate → identify → fix → verify)
+- `/extract-test` — Run extraction on test image, compare to reference
+- `/detection-audit` — Audit detection parameters, flag anomalies
+- `/simplify` — Review code for redundancy

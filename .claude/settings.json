@@ -1,4 +1,5 @@
 {
+  "agent": "master",
   "env": {
     "COMFYUI_URL": "http://127.0.0.1:8000",
     "APP_URL": "http://127.0.0.1:8080",
@@ -15,7 +16,13 @@
       "Bash(python serve.py)",
       "Bash(python screenshot.py *)",
       "Bash(curl http://127.0.0.1:*)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(node --check *)",
+      "Bash(cat *)",
+      "Bash(wc *)",
+      "Bash(ls *)",
+      "Bash(.venv/Scripts/python.exe tests/quality_loop.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -42,6 +49,16 @@
           {
             "type": "command",
             "command": "bash -c 'FILE=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r \".file_path // .filePath // empty\"); case \"$FILE\" in *.html|*.css|*.HTML|*.CSS) echo \"[Reminder] Run: python screenshot.py to verify visual changes\" ;; *.js|*.JS) node --check \"$FILE\" 2>&1 || echo \"[ERROR] JavaScript syntax error in $FILE\" ;; *.py|*.PY) python -m py_compile \"$FILE\" 2>&1 || echo \"[ERROR] Python syntax error in $FILE\" ;; esac'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[PROJECT CONTEXT] Rules: .claude/rules/ | Agents: extraction-analyst, quality-checker, test-runner | Memory: ~/.claude/projects/C--Dev/memory/ | Check what-worked.md before proposing new detection approaches. Compare to reference images in input/Example quality image extraction/. UI borders are 15-85px textured frames, NOT thin black lines.\"'"
           }
         ]
       }
