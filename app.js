@@ -1474,7 +1474,7 @@ function restoreEdgeColorsFromOriginal(finalCanvas, sourceCanvas) {
     }
   }
 
-  const BORDER = 3;   // restore original colors within 3px of edge
+  const BORDER = 6;   // restore original colors within 6px of edge
   for (let i = 0; i < total; i += 1) {
     const off = i * 4;
     const a = fd[off + 3];
@@ -1488,15 +1488,26 @@ function restoreEdgeColorsFromOriginal(finalCanvas, sourceCanvas) {
       rd[off]     = sd[off];
       rd[off + 1] = sd[off + 1];
       rd[off + 2] = sd[off + 2];
-      // Anti-aliased feather at outermost pixels
-      if (d === 1) rd[off + 3] = 192;
-      else if (d === 2) rd[off + 3] = 224;
+      // Graduated anti-aliased feather at outermost pixels
+      if (d === 1) rd[off + 3] = 128;
+      else if (d === 2) rd[off + 3] = 180;
+      else if (d === 3) rd[off + 3] = 210;
+      else if (d === 4) rd[off + 3] = 235;
       else rd[off + 3] = 255;
     } else {
-      // Interior: keep processed colors
-      rd[off]     = fd[off];
-      rd[off + 1] = fd[off + 1];
-      rd[off + 2] = fd[off + 2];
+      // Interior: blend original colors at moderate distance for
+      // overall color fidelity improvement
+      const blendDist = 12;
+      if (d <= blendDist) {
+        const t = (d - BORDER) / (blendDist - BORDER);
+        rd[off]     = Math.round(sd[off]     * (1 - t) + fd[off]     * t);
+        rd[off + 1] = Math.round(sd[off + 1] * (1 - t) + fd[off + 1] * t);
+        rd[off + 2] = Math.round(sd[off + 2] * (1 - t) + fd[off + 2] * t);
+      } else {
+        rd[off]     = fd[off];
+        rd[off + 1] = fd[off + 1];
+        rd[off + 2] = fd[off + 2];
+      }
       rd[off + 3] = a;
     }
   }
