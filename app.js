@@ -248,7 +248,7 @@ let cancelProcessingRequested = false;
 let isProcessing = false;
 let selectedPanelIndex = -1;
 let activeKeepBox = null;
-let splitPanelFilter = "likely";
+let splitPanelFilter = "all";
 let splitPanelMinPixels = 0;
 let splitPanelSortMode = "useful";
 let processedLayoutCanvas = null;
@@ -2700,9 +2700,10 @@ function classifyPanelFromBox(box, width, height, sourceType = "auto") {
   const heightRatio = boxHeight / Math.max(1, height);
   const aspect = boxWidth / Math.max(1, boxHeight);
   const isThinHorizontal = aspect >= 4 && heightRatio <= 0.18;
+  const isWideBar = widthRatio >= 0.5 && heightRatio <= 0.35; // game UI bars spanning most of width
   const isThinVertical = aspect <= 0.35 && widthRatio <= 0.16;
   const isCompactPanel = widthRatio >= 0.1 && widthRatio <= 0.75 && heightRatio >= 0.08 && heightRatio <= 0.45;
-  const likelyUi = sourceType !== "auto" || isThinHorizontal || isThinVertical || isCompactPanel;
+  const likelyUi = sourceType !== "auto" || isThinHorizontal || isWideBar || isThinVertical || isCompactPanel;
   let label = "Likely UI asset";
   if (sourceType === "keep-box") label = "Protected UI box";
   else if (sourceType === "brush") label = "Brushed UI detail";
