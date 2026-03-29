@@ -1299,8 +1299,7 @@ async function generateComfyuiMask() {
 
 function buildHybridUiMask(sourceData, width, height, tone) {
   // Custom border + object detection for game UI extraction.
-  // Game UIs have horizontal bars at top/bottom that span most of the width.
-  // We detect these by scanning each row's edge density.
+  // Scans row/column edge density to find horizontal bars and side panels.
 
   const edges = computeEdgeStrengthMap(sourceData);
   const data = sourceData.data;
@@ -1308,8 +1307,6 @@ function buildHybridUiMask(sourceData, width, height, tone) {
   const edgeThreshold = 30;
 
   // Phase 1: Row-based edge density scan.
-  // For each row, count what fraction of pixels have strong edges.
-  // UI bars produce dense edges spanning >40% of width.
   const rowDensity = new Float32Array(height);
   for (let y = 0; y < height; y += 1) {
     let edgeCount = 0;
@@ -3518,7 +3515,61 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
       splitAutoPanels.push(box);
     }
   }
-  const finalAutoPanels = splitAutoPanels.length > 0 ? splitAutoPanels : autoPanelSourceBoxes;
+  // Phase 2: Vertical gap splitting — within each horizontal band, scan
+  // columns for gaps to separate individual objects (portrait frame, chat
+  // panel, button row). Same approach as horizontal splitting.
+  const vertSplitPanels = [];
+  for (const band of splitAutoPanels) {
+    const bandW = band.right - band.left;
+    const bandH = band.bottom - band.top;
+    // Only vertically split wide bands (> 40% of image width)
+    if (bandW > sourceCanvas.width * 0.4) {
+      const vGapThreshold = bandH * 0.08;
+      const cols = [];
+      let colStart = band.left;
+      let inVGap = false;
+      for (let x = band.left; x <= band.right; x += 1) {
+        let count = 0;
+        if (x < band.right) {
+          for (let y = band.top; y < band.bottom; y += 1) {
+            if (alpha[y * sourceCanvas.width + x] >= settings.componentAlpha) count += 1;
+          }
+        }
+        const isVGap = x >= band.right || count < vGapThreshold;
+        if (isVGap && !inVGap) {
+          if (x - colStart > 15) cols.push({ left: colStart, right: x });
+          inVGap = true;
+        }
+        if (!isVGap && inVGap) { colStart = x; inVGap = false; }
+      }
+      if (cols.length > 1) {
+        for (const col of cols) {
+          let minY = band.bottom, maxY = band.top, pixCount = 0;
+          for (let y = band.top; y < band.bottom; y += 1) {
+            for (let x = col.left; x < col.right; x += 1) {
+              if (alpha[y * sourceCanvas.width + x] >= settings.componentAlpha) {
+                minY = Math.min(minY, y); maxY = Math.max(maxY, y); pixCount += 1;
+              }
+            }
+          }
+          if (pixCount >= Math.min(settings.componentPixels, 300)) {
+            const ow = col.right - col.left, oh = maxY - minY + 1;
+            vertSplitPanels.push({
+              left: col.left, top: minY, right: col.right, bottom: maxY + 1,
+              width: ow, height: oh, area: ow * oh, count: pixCount,
+              solidity: pixCount / Math.max(1, ow * oh),
+              edgeTouches: band.edgeTouches, sourceType: band.sourceType
+            });
+          }
+        }
+      } else {
+        vertSplitPanels.push(band);
+      }
+    } else {
+      vertSplitPanels.push(band);
+    }
+  }
+  const finalAutoPanels = vertSplitPanels.length > 0 ? vertSplitPanels : autoPanelSourceBoxes;
   const manualPanelBoxes = settings.mode === "multi" && settings.manualKeepBoxes.length
     ? getManualKeepPanelBoxes(sourceCanvas.width, sourceCanvas.height, settings.manualKeepBoxes, settings.componentPad)
     : [];
@@ -4324,15 +4375,15 @@ function filterComponentBoxes(boxes, width, height, keepSamples = [], keepBoxes 
     const isPanelLike = widthRatio >= 0.12 && widthRatio <= 0.82 && heightRatio >= 0.08 && heightRatio <= 0.42;
     const isDenseEnough = box.solidity >= 0.12;
     const edgeHeavy = box.edgeTouches >= 2;
-    const probablySceneFragment =
+    // Wide horizontal strips (bars, toolbars) naturally have low solidity because
+    // they span full width but contain discrete UI elements with gaps between them.
+    const isWideHorizontalStrip = widthRatio > 0.5 && heightRatio < 0.40;
+    const probablySceneFragment = isWideHorizontalStrip ? false :
       (isHuge && edgeHeavy && box.solidity < 0.7) ||
       (box.edgeTouches >= 3 && box.solidity < 0.82) ||
       (heightRatio > 0.55 && widthRatio < 0.2) ||
       (widthRatio > 0.55 && heightRatio > 0.55) ||
-      // Irregular shapes: low solidity means the component doesn't fill its
-      // bounding box — cave fragments are blobby, UI elements are rectangular
       (box.solidity < 0.35) ||
-      // Medium-low solidity + doesn't span an edge = likely scenic debris
       (box.solidity < 0.55 && !isHorizontalBar && !isVerticalBar && !isPanelLike);
 
     const keepPointInside = keepSamples.some((sample) => (
@@ -4350,7 +4401,7 @@ function filterComponentBoxes(boxes, width, height, keepSamples = [], keepBoxes 
       keepPointInside ||
       keepBoxInside ||
       keepBrushInside ||
-      (!probablySceneFragment && isDenseEnough && (isHorizontalBar || isVerticalBar || isPanelLike));
+      (!probablySceneFragment && isDenseEnough && (isHorizontalBar || isVerticalBar || isPanelLike || isWideHorizontalStrip));
 
     if (keep) accepted.push(box);
     else rejected.push(box);
