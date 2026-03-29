@@ -2122,6 +2122,7 @@ function buildStructuralUiMask(sourceData, width, height, tone) {
   }
 
   // Refine: remove background-colored pixels in the center zone
+  // Only remove pixels in the UPPER center (scene area), protect bottom UI panels
   const data = sourceData.data;
   let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
   for (let y = Math.floor(height * 0.3); y < Math.floor(height * 0.6); y += 2) {
@@ -2132,11 +2133,11 @@ function buildStructuralUiMask(sourceData, width, height, tone) {
     }
   }
   if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
-  const colorThreshold = tone === "dark" ? 35 : 60;
-  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.68); y += 1) {
+  const colorThreshold = tone === "dark" ? 25 : 50;
+  // Restrict to upper-center zone only (12-55% height) — protects bottom bar UI panels
+  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.55); y += 1) {
     for (let x = 0; x < width; x += 1) {
       if (alpha[y * width + x] === 0) continue;
-      // Only clean center pixels, keep edges
       if (x > width * 0.15 && x < width * 0.85) {
         const idx = (y * width + x) * 4;
         const dist = Math.sqrt((data[idx]-bgR)**2 + (data[idx+1]-bgG)**2 + (data[idx+2]-bgB)**2);
@@ -2145,8 +2146,8 @@ function buildStructuralUiMask(sourceData, width, height, tone) {
     }
   }
 
-  // Disconnect thin vertical connectors
-  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.68); y += 1) {
+  // Disconnect thin vertical connectors (only in upper-center zone)
+  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.55); y += 1) {
     let opaqueInRow = 0;
     for (let x = 0; x < width; x += 1) {
       if (alpha[y * width + x] > 0) opaqueInRow += 1;
@@ -4065,7 +4066,7 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
   }
   if (settings.decontaminate) {
     const isAiDetectedMask = !!(importedAiMaskAlpha);
-    const cleanupPasses = isAiDetectedMask ? (importedAiMaskIsInternal ? 2 : 1)
+    const cleanupPasses = isAiDetectedMask ? (importedAiMaskIsInternal ? 3 : 1)
       : settings.edgeCleanupStrength >= 80 ? 3
       : settings.edgeCleanupStrength >= 45 ? 2
       : 1;
@@ -4534,13 +4535,13 @@ function repairOpaqueEdgePixels(imageData, backgroundSample) {
       const drift = getColorDistance(srcR, srcG, srcB, { r: avgR, g: avgG, b: avgB });
       const currentLuma = (srcR * 0.2126) + (srcG * 0.7152) + (srcB * 0.0722);
       const candidateLuma = (avgR * 0.2126) + (avgG * 0.7152) + (avgB * 0.0722);
-      const contaminated = srcDistance < Math.max(32, candidateDistance * 0.75)
-        || drift > 22
-        || Math.abs(currentLuma - candidateLuma) > 18;
+      const contaminated = srcDistance < Math.max(28, candidateDistance * 0.70)
+        || drift > 16
+        || Math.abs(currentLuma - candidateLuma) > 14;
 
       if (!contaminated) continue;
 
-      const blend = srcDistance < 24 ? 1 : drift > 34 ? 0.92 : 0.82;
+      const blend = srcDistance < 20 ? 1 : drift > 28 ? 0.95 : 0.85;
       data[offset] = Math.round((srcR * (1 - blend)) + (avgR * blend));
       data[offset + 1] = Math.round((srcG * (1 - blend)) + (avgG * blend));
       data[offset + 2] = Math.round((srcB * (1 - blend)) + (avgB * blend));
