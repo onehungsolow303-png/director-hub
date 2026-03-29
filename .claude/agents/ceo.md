@@ -112,6 +112,13 @@ After master completes:
 - Log all security events to memory/security_log.md
 - Enforce domain allowlist from .claude/rules/web-security.md
 
+## Copyright Enforcement
+
+- Invoke /copyright-check on ALL web-fetched visual content (images, screenshots, asset references) after Step 3 research, BEFORE compiling the master prompt in Step 4
+- If /copyright-check returns high risk: warn the user with details of what was detected
+- Ensure master invokes /copyright-check on AI Remove pipeline outputs
+- Log all copyright findings to memory/security_log.md under ## Copyright Checks
+
 ## Originality Responsibilities
 
 - Review code changes from master/workers for originality
