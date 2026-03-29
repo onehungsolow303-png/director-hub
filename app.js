@@ -1298,89 +1298,158 @@ async function generateComfyuiMask() {
 // --- Hybrid Edge+Color UI Detection (no ComfyUI needed) ---
 
 function buildHybridUiMask(sourceData, width, height, tone) {
-  // Phase 1: Compute edge strength map
-  const edges = computeEdgeStrengthMap(sourceData);
+  // Custom border + object detection for game UI extraction.
+  // Game UIs have horizontal bars at top/bottom that span most of the width.
+  // We detect these by scanning each row's edge density.
 
-  // Phase 2: Sample background from image CENTER (game scenes are in the center)
+  const edges = computeEdgeStrengthMap(sourceData);
   const data = sourceData.data;
-  const centerX1 = Math.floor(width * 0.25);
-  const centerX2 = Math.floor(width * 0.75);
-  const centerY1 = Math.floor(height * 0.3);
-  const centerY2 = Math.floor(height * 0.7);
+  const total = width * height;
+  const edgeThreshold = 30;
+
+  // Phase 1: Row-based edge density scan.
+  // For each row, count what fraction of pixels have strong edges.
+  // UI bars produce dense edges spanning >40% of width.
+  const rowDensity = new Float32Array(height);
+  for (let y = 0; y < height; y += 1) {
+    let edgeCount = 0;
+    for (let x = 0; x < width; x += 1) {
+      if (edges[y * width + x] >= edgeThreshold) edgeCount += 1;
+    }
+    rowDensity[y] = edgeCount / width;
+  }
+
+  // Phase 2: Column-based edge density scan (for side panels).
+  const colDensity = new Float32Array(width);
+  for (let x = 0; x < width; x += 1) {
+    let edgeCount = 0;
+    for (let y = 0; y < height; y += 1) {
+      if (edges[y * width + x] >= edgeThreshold) edgeCount += 1;
+    }
+    colDensity[x] = edgeCount / height;
+  }
+
+  // Phase 3: Find UI bands — contiguous groups of rows with high edge density.
+  // Smooth the density signal to avoid single-row gaps breaking bands.
+  const smoothed = new Float32Array(height);
+  const smoothRadius = 3;
+  for (let y = 0; y < height; y += 1) {
+    let sum = 0, count = 0;
+    for (let dy = -smoothRadius; dy <= smoothRadius; dy += 1) {
+      const ny = y + dy;
+      if (ny >= 0 && ny < height) { sum += rowDensity[ny]; count += 1; }
+    }
+    smoothed[y] = sum / count;
+  }
+
+  // A row is "UI-like" if its smoothed edge density exceeds the threshold.
+  // Use an adaptive threshold: median density + a boost.
+  const sortedDensity = [...smoothed].sort((a, b) => a - b);
+  const medianDensity = sortedDensity[Math.floor(height * 0.5)];
+  const densityThreshold = Math.max(0.04, medianDensity * 2.5);
+
+  // Find bands of UI rows
+  const isUiRow = new Uint8Array(height);
+  for (let y = 0; y < height; y += 1) {
+    isUiRow[y] = smoothed[y] >= densityThreshold ? 1 : 0;
+  }
+
+  // Merge nearby bands (gap <= 8 rows) to connect UI bars with thin gaps
+  for (let y = 1; y < height; y += 1) {
+    if (isUiRow[y] === 0 && isUiRow[y - 1] === 1) {
+      // Check if there's another UI row within 8 rows ahead
+      for (let ahead = 1; ahead <= 8 && y + ahead < height; ahead += 1) {
+        if (isUiRow[y + ahead] === 1) {
+          for (let fill = 0; fill < ahead; fill += 1) isUiRow[y + fill] = 1;
+          break;
+        }
+      }
+    }
+  }
+
+  // Phase 4: Similarly for columns — find dense vertical strips (side panels)
+  const smoothedCol = new Float32Array(width);
+  for (let x = 0; x < width; x += 1) {
+    let sum = 0, count = 0;
+    for (let dx = -smoothRadius; dx <= smoothRadius; dx += 1) {
+      const nx = x + dx;
+      if (nx >= 0 && nx < width) { sum += colDensity[nx]; count += 1; }
+    }
+    smoothedCol[x] = sum / count;
+  }
+  const colThreshold = Math.max(0.06, medianDensity * 3);
+  const isUiCol = new Uint8Array(width);
+  for (let x = 0; x < width; x += 1) {
+    // Only mark columns near screen edges as potential UI (not center)
+    if (x < width * 0.2 || x > width * 0.8) {
+      isUiCol[x] = smoothedCol[x] >= colThreshold ? 1 : 0;
+    }
+  }
+  // Merge nearby column bands
+  for (let x = 1; x < width; x += 1) {
+    if (isUiCol[x] === 0 && isUiCol[x - 1] === 1) {
+      for (let ahead = 1; ahead <= 8 && x + ahead < width; ahead += 1) {
+        if (isUiCol[x + ahead] === 1) {
+          for (let fill = 0; fill < ahead; fill += 1) isUiCol[x + fill] = 1;
+          break;
+        }
+      }
+    }
+  }
+
+  // Phase 5: Build alpha mask from detected bands.
+  // A pixel is foreground if it's in a UI row OR a UI column.
+  const alpha = new Uint8ClampedArray(total);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (isUiRow[y] || isUiCol[x]) {
+        alpha[y * width + x] = 255;
+      }
+    }
+  }
+
+  // Phase 6: Within detected bands, refine using color distance from center.
+  // The bands include the full width but the CENTER of the image is scene,
+  // not UI. Remove center pixels that match the background color.
+  // Sample background from the center of non-UI rows.
   let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
-  for (let y = centerY1; y < centerY2; y += 4) {
-    for (let x = centerX1; x < centerX2; x += 4) {
+  for (let y = Math.floor(height * 0.3); y < Math.floor(height * 0.6); y += 2) {
+    if (isUiRow[y]) continue; // skip UI rows
+    for (let x = Math.floor(width * 0.3); x < Math.floor(width * 0.7); x += 2) {
       const idx = (y * width + x) * 4;
-      // Skip pixels with strong edges (likely UI in center)
-      if (edges[y * width + x] > 60) continue;
       bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2];
       bgCount += 1;
     }
   }
   if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
-  const bgSample = { r: Math.round(bgR), g: Math.round(bgG), b: Math.round(bgB) };
 
-  // Phase 3: Build a "UI likelihood" map combining edge strength + color distance
-  const total = width * height;
-  const uiScore = new Float32Array(total);
-  for (let i = 0; i < total; i += 1) {
-    const idx = i * 4;
-    const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-    // Color distance from background (0-441 range for RGB)
-    const colorDist = Math.sqrt(
-      (r - bgSample.r) ** 2 + (g - bgSample.g) ** 2 + (b - bgSample.b) ** 2
-    );
-    // Edge strength at this pixel
-    const edgeVal = edges[i];
-    // Position bonus: UI bars are at TOP and BOTTOM of game screenshots,
-    // NOT at left/right (where the scene extends to screen edges)
-    const x = i % width, y = Math.floor(i / width);
-    const nearTop = y < height * 0.08 ? 50 : 0;
-    const nearBottom = y > height * 0.72 ? 50 : 0;
-    const posBonus = nearTop + nearBottom;
-    // Combined score: balanced edge + color, with top/bottom position bonus
-    uiScore[i] = colorDist * 0.4 + edgeVal * 0.5 + posBonus;
-  }
-
-  // Phase 4: Threshold the UI score to create initial binary mask
-  // Use Otsu-like adaptive thresholding: find the score that separates
-  // the top ~15% of pixels (likely UI) from the rest
-  const histogram = new Uint32Array(256);
-  for (let i = 0; i < total; i += 1) {
-    histogram[Math.min(255, Math.floor(uiScore[i]))] += 1;
-  }
-  let cumulative = 0;
-  let scoreThreshold = 255;
-  const targetPixels = total * 0.30; // UI is typically 15-30% of game screenshots
-  for (let t = 255; t >= 0; t -= 1) {
-    cumulative += histogram[t];
-    if (cumulative >= targetPixels) {
-      scoreThreshold = t;
-      break;
+  // For pixels in UI rows that are far from the top/bottom edges,
+  // check if they look like background and remove them.
+  const colorThreshold = tone === "dark" ? 35 : 60;
+  for (let y = 0; y < height; y += 1) {
+    if (!isUiRow[y]) continue;
+    // Only refine rows that are in the "middle" zone (not top/bottom bars)
+    const yRatio = y / height;
+    if (yRatio > 0.10 && yRatio < 0.70) {
+      for (let x = 0; x < width; x += 1) {
+        if (isUiCol[x]) continue; // keep side panel columns
+        const idx = (y * width + x) * 4;
+        const dist = Math.sqrt(
+          (data[idx] - bgR) ** 2 + (data[idx + 1] - bgG) ** 2 + (data[idx + 2] - bgB) ** 2
+        );
+        if (dist < colorThreshold) {
+          alpha[y * width + x] = 0; // looks like background
+        }
+      }
     }
   }
-  // Ensure minimum threshold to avoid including too much background
-  scoreThreshold = Math.max(scoreThreshold, 50);
 
-  // Phase 5: Build alpha from thresholded scores
-  const alpha = new Uint8ClampedArray(total);
-  for (let i = 0; i < total; i += 1) {
-    alpha[i] = uiScore[i] >= scoreThreshold ? 255 : 0;
-  }
-
-  // Phase 6: Morphological close (dilate then erode)
-  // to fill small holes in UI regions and connect nearby elements
-  let cleaned = dilateAlpha(alpha, width, height, 2);
-  cleaned = erodeAlpha(cleaned, width, height, 2);
-
-  // Phase 7: Remove tiny isolated fragments (noise)
-  // Re-use the existing flood-fill component detection
+  // Phase 7: Remove tiny isolated fragments
   const seen = new Uint8Array(total);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const startIdx = y * width + x;
-      if (seen[startIdx] || cleaned[startIdx] === 0) continue;
-      // Flood-fill to find component size
+      if (seen[startIdx] || alpha[startIdx] === 0) continue;
       const queue = [startIdx];
       seen[startIdx] = 1;
       let head = 0;
@@ -1391,19 +1460,18 @@ function buildHybridUiMask(sourceData, width, height, tone) {
         count += 1;
         pixels.push(ci);
         const cx = ci % width, cy = Math.floor(ci / width);
-        if (cx > 0)          { const ni = ci - 1;     if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-        if (cx < width - 1)  { const ni = ci + 1;     if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-        if (cy > 0)          { const ni = ci - width;  if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
-        if (cy < height - 1) { const ni = ci + width;  if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cx > 0)          { const ni = ci - 1;     if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cx < width - 1)  { const ni = ci + 1;     if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cy > 0)          { const ni = ci - width;  if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cy < height - 1) { const ni = ci + width;  if (!seen[ni] && alpha[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
       }
-      // Remove components smaller than 0.1% of image (noise/debris)
-      if (count < total * 0.001) {
-        for (const pi of pixels) cleaned[pi] = 0;
+      if (count < total * 0.002) {
+        for (const pi of pixels) alpha[pi] = 0;
       }
     }
   }
 
-  return cleaned;
+  return alpha;
 }
 
 // --- AI Remove (one-click workflow) ---
@@ -1468,14 +1536,6 @@ async function aiRemoveWorkflow() {
     if (aiRemoveStatus) {
       aiRemoveStatus.textContent = "Step 2/2: Extracting UI with edge protection...";
       aiRemoveStatus.style.color = "var(--accent)";
-    }
-
-    // Auto-add keep boxes for common dark UI positions
-    const currentTone2 = bgTone ? bgTone.value : "dark";
-    if (currentTone2 === "dark" && manualKeepBoxes.length === 0) {
-      addPresetKeepBoxes("top");
-      addPresetKeepBoxes("bottom");
-      addPresetKeepBoxes("icons");
     }
 
     // Auto-trigger Process Image
