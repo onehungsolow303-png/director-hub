@@ -1443,7 +1443,23 @@ function buildHybridUiMask(sourceData, width, height, tone) {
     }
   }
 
-  // Phase 7: Remove tiny isolated fragments
+  // Phase 7: Disconnect UI bands — find rows where only a thin vertical
+  // strip connects the top bar to the bottom bar, and zero those rows.
+  // This allows split panel detection to find individual UI elements.
+  for (let y = Math.floor(height * 0.12); y < Math.floor(height * 0.68); y += 1) {
+    let opaqueInRow = 0;
+    for (let x = 0; x < width; x += 1) {
+      if (alpha[y * width + x] > 0) opaqueInRow += 1;
+    }
+    // If less than 3% of the row is opaque, it's a thin connector — zero it
+    if (opaqueInRow > 0 && opaqueInRow < width * 0.03) {
+      for (let x = 0; x < width; x += 1) {
+        alpha[y * width + x] = 0;
+      }
+    }
+  }
+
+  // Phase 8: Remove tiny isolated fragments
   const seen = new Uint8Array(total);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -3437,7 +3453,7 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
     );
     if (settings.cropTransparent) resultCanvasLocal = cropToVisibleCanvas(resultCanvasLocal);
   }
-  const autoPanelSourceBoxes = settings.mode === "multi" && (settings.manualKeepSamples.length || settings.manualKeepBoxes.length || settings.manualKeepBrushPoints.length)
+  let autoPanelSourceBoxes = settings.mode === "multi" && (settings.manualKeepSamples.length || settings.manualKeepBoxes.length || settings.manualKeepBrushPoints.length)
     ? boxes.filter((box) =>
       settings.manualKeepSamples.some((sample) => sample.x >= box.left && sample.x < box.right && sample.y >= box.top && sample.y < box.bottom)
       || settings.manualKeepBoxes.some((keepBox) => {
@@ -3446,6 +3462,63 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
       })
       || settings.manualKeepBrushPoints.some((point) => point.x >= box.left && point.x < box.right && point.y >= box.top && point.y < box.bottom))
     : boxes;
+  // If no boxes were accepted but we have rejected full-image components,
+  // use those for splitting into individual UI panels.
+  if (autoPanelSourceBoxes.length === 0 && rejected.length > 0) {
+    autoPanelSourceBoxes = rejected.filter(r => r.count > settings.componentPixels);
+  }
+  // Split large components at horizontal gaps to separate top bar from
+  // bottom bar. Scans for rows with very few opaque pixels within a box.
+  const splitAutoPanels = [];
+  for (const box of autoPanelSourceBoxes) {
+    const boxH = box.bottom - box.top;
+    if (boxH > sourceCanvas.height * 0.25) {
+      const boxW = box.right - box.left;
+      const gapThreshold = boxW * 0.05;
+      const bands = [];
+      let bandStart = box.top;
+      let inGap = false;
+      for (let y = box.top; y < box.bottom; y += 1) {
+        let count = 0;
+        for (let x = box.left; x < box.right; x += 1) {
+          if (alpha[y * sourceCanvas.width + x] >= settings.componentAlpha) count += 1;
+        }
+        const isGap = count < gapThreshold;
+        if (isGap && !inGap) {
+          if (y - bandStart > 10) bands.push({ top: bandStart, bottom: y });
+          inGap = true;
+        }
+        if (!isGap && inGap) { bandStart = y; inGap = false; }
+      }
+      if (!inGap && box.bottom - bandStart > 10) bands.push({ top: bandStart, bottom: box.bottom });
+      if (bands.length > 1) {
+        for (const band of bands) {
+          let minX = sourceCanvas.width, maxX = 0, pixCount = 0;
+          for (let y = band.top; y < band.bottom; y += 1) {
+            for (let x = box.left; x < box.right; x += 1) {
+              if (alpha[y * sourceCanvas.width + x] >= settings.componentAlpha) {
+                minX = Math.min(minX, x); maxX = Math.max(maxX, x); pixCount += 1;
+              }
+            }
+          }
+          if (pixCount >= Math.min(settings.componentPixels, 500)) {
+            splitAutoPanels.push({
+              left: minX, top: band.top, right: maxX + 1, bottom: band.bottom,
+              width: maxX - minX + 1, height: band.bottom - band.top,
+              area: (maxX - minX + 1) * (band.bottom - band.top), count: pixCount,
+              solidity: pixCount / Math.max(1, (maxX - minX + 1) * (band.bottom - band.top)),
+              edgeTouches: box.edgeTouches, sourceType: box.sourceType
+            });
+          }
+        }
+      } else {
+        splitAutoPanels.push(box);
+      }
+    } else {
+      splitAutoPanels.push(box);
+    }
+  }
+  const finalAutoPanels = splitAutoPanels.length > 0 ? splitAutoPanels : autoPanelSourceBoxes;
   const manualPanelBoxes = settings.mode === "multi" && settings.manualKeepBoxes.length
     ? getManualKeepPanelBoxes(sourceCanvas.width, sourceCanvas.height, settings.manualKeepBoxes, settings.componentPad)
     : [];
@@ -3453,7 +3526,7 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
     ? getBrushPanelBoxes(sourceCanvas.width, sourceCanvas.height, settings.manualKeepBrushPoints, settings.componentPad)
     : [];
   const panelSourceBoxes = [
-    ...autoPanelSourceBoxes.map((box) => ({ ...box, sourceType: "auto" })),
+    ...finalAutoPanels.map((box) => ({ ...box, sourceType: box.sourceType || "auto" })),
     ...manualPanelBoxes.map((box) => ({ ...box, sourceType: "keep-box" })),
     ...brushPanelBoxes.map((box) => ({ ...box, sourceType: "brush" }))
   ];
