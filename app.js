@@ -3169,18 +3169,18 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
     settings.manualKeepBoxes,
     settings.manualKeepBrushPoints
   );
-  // Zero out rejected components in the result — removes scenic debris
-  // from the full-sheet output, not just from split panels.
-  if (rejected.length > 0 && importedAiMaskAlpha) {
+  // Zero out rejected components using per-pixel labels — avoids
+  // destroying accepted components whose bounding boxes overlap.
+  const componentLabels = rawBoxes._labels;
+  if (rejected.length > 0 && boxes.length > 0 && importedAiMaskAlpha && componentLabels) {
+    // Only clean up if some components were accepted — don't blank the entire result
+    const rejectedLabels = new Set(rejected.map(b => b.label));
     const rd = resultData.data;
-    for (const box of rejected) {
-      for (let y = box.top; y < box.bottom && y < sourceCanvas.height; y += 1) {
-        for (let x = box.left; x < box.right && x < sourceCanvas.width; x += 1) {
-          const idx = (y * sourceCanvas.width + x) * 4;
-          if (rd[idx + 3] > 0) {
-            rd[idx] = 0; rd[idx + 1] = 0; rd[idx + 2] = 0; rd[idx + 3] = 0;
-          }
-        }
+    const total = sourceCanvas.width * sourceCanvas.height;
+    for (let i = 0; i < total; i += 1) {
+      if (rejectedLabels.has(componentLabels[i])) {
+        const idx = i * 4;
+        rd[idx] = 0; rd[idx + 1] = 0; rd[idx + 2] = 0; rd[idx + 3] = 0;
       }
     }
     fullLayoutCanvas.getContext("2d").putImageData(resultData, 0, 0);
@@ -3952,13 +3952,17 @@ function processObjectCrop(sourceCanvas, sourceData, settings, backgroundSample)
 
 function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
   const seen = new Uint8Array(width * height);
+  // Per-pixel component labels: 0 = no component, 1+ = component index
+  const labels = new Uint16Array(width * height);
   const boxes = [];
+  let nextLabel = 1;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const startIndex = y * width + x;
       if (seen[startIndex] || alpha[startIndex] < alphaThreshold) continue;
       const queue = [startIndex];
       seen[startIndex] = 1;
+      const currentLabel = nextLabel++;
       let head = 0;
       let count = 0;
       let minX = x;
@@ -3974,6 +3978,7 @@ function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
         const cx = ci % width;
         const cy = (ci - cx) / width;
         count += 1;
+        labels[ci] = currentLabel;
         minX = Math.min(minX, cx);
         minY = Math.min(minY, cy);
         maxX = Math.max(maxX, cx);
@@ -3992,6 +3997,7 @@ function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
         const boxHeight = maxY - minY + 1;
         const area = boxWidth * boxHeight;
         boxes.push({
+          label: currentLabel,
           left: minX,
           top: minY,
           right: maxX + 1,
@@ -4007,7 +4013,9 @@ function findComponentBoxes(alpha, width, height, minPixels, alphaThreshold) {
     }
   }
   boxes.sort((a, b) => b.area - a.area);
-  return boxes.slice(0, 8);
+  const result = boxes.slice(0, 8);
+  result._labels = labels;
+  return result;
 }
 
 function filterComponentBoxes(boxes, width, height, keepSamples = [], keepBoxes = [], keepBrushPoints = []) {
