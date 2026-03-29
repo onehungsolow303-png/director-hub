@@ -1887,21 +1887,21 @@ function buildBlackBorderUiMask(sourceData, width, height) {
       if (obj.touchesEdge) continue;
       if (obj.pixelCount < total * 0.001) continue;
 
+      // Protect UI-shaped regions from ALL trapped bg classification
+      if (hasUiShape(obj)) continue;
+
       // RAG check: are ALL neighbors either background or border?
       const neighbors = adjacency.get(obj.label);
       if (neighbors && neighbors.size > 0) {
         const allNeighborsBg = [...neighbors].every(n => bgLabels.has(n));
-        if (allNeighborsBg && obj.colorVariance > bgColorVar * 0.35) {
-          // Completely enclosed by background AND has scene-like variance
+        if (allNeighborsBg && obj.colorVariance > bgColorVar * 0.50 && obj.interiorEdgeDensity > bgEdgeDensity * 0.40) {
+          // Completely enclosed by background AND has scene-like variance AND complex interior
           bgLabels.add(obj.label);
           trappedCount += 1;
           ragChanged = true;
           continue;
         }
       }
-
-      // Protect UI-shaped regions from signal-based classification
-      if (hasUiShape(obj)) continue;
 
       // Signal-based fallback for regions not fully enclosed by bg
       let bgSignals = 0;
@@ -4065,7 +4065,7 @@ function buildProcessedBackgroundFromAlpha(sourceCanvas, sourceData, alpha, sett
   }
   if (settings.decontaminate) {
     const isAiDetectedMask = !!(importedAiMaskAlpha);
-    const cleanupPasses = isAiDetectedMask ? 1
+    const cleanupPasses = isAiDetectedMask ? (importedAiMaskIsInternal ? 2 : 1)
       : settings.edgeCleanupStrength >= 80 ? 3
       : settings.edgeCleanupStrength >= 45 ? 2
       : 1;
