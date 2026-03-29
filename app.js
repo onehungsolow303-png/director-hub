@@ -1377,7 +1377,7 @@ function buildHybridUiMask(sourceData, width, height, tone) {
     }
     smoothedCol[x] = sum / count;
   }
-  const colThreshold = Math.max(0.06, medianDensity * 3);
+  const colThreshold = Math.max(0.08, medianDensity * 4);
   const isUiCol = new Uint8Array(width);
   for (let x = 0; x < width; x += 1) {
     // Only mark columns near screen edges as potential UI (not center)
@@ -1398,7 +1398,6 @@ function buildHybridUiMask(sourceData, width, height, tone) {
   }
 
   // Phase 5: Build alpha mask from detected bands.
-  // A pixel is foreground if it's in a UI row OR a UI column.
   const alpha = new Uint8ClampedArray(total);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
