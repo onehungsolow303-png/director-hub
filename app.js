@@ -1295,6 +1295,115 @@ async function generateComfyuiMask() {
   }
 }
 
+// --- Hybrid Edge+Color UI Detection (no ComfyUI needed) ---
+
+function buildHybridUiMask(sourceData, width, height, tone) {
+  // Phase 1: Compute edge strength map
+  const edges = computeEdgeStrengthMap(sourceData);
+
+  // Phase 2: Sample background from image CENTER (game scenes are in the center)
+  const data = sourceData.data;
+  const centerX1 = Math.floor(width * 0.25);
+  const centerX2 = Math.floor(width * 0.75);
+  const centerY1 = Math.floor(height * 0.3);
+  const centerY2 = Math.floor(height * 0.7);
+  let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+  for (let y = centerY1; y < centerY2; y += 4) {
+    for (let x = centerX1; x < centerX2; x += 4) {
+      const idx = (y * width + x) * 4;
+      // Skip pixels with strong edges (likely UI in center)
+      if (edges[y * width + x] > 60) continue;
+      bgR += data[idx]; bgG += data[idx + 1]; bgB += data[idx + 2];
+      bgCount += 1;
+    }
+  }
+  if (bgCount > 0) { bgR /= bgCount; bgG /= bgCount; bgB /= bgCount; }
+  const bgSample = { r: Math.round(bgR), g: Math.round(bgG), b: Math.round(bgB) };
+
+  // Phase 3: Build a "UI likelihood" map combining edge strength + color distance
+  const total = width * height;
+  const uiScore = new Float32Array(total);
+  for (let i = 0; i < total; i += 1) {
+    const idx = i * 4;
+    const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+    // Color distance from background (0-441 range for RGB)
+    const colorDist = Math.sqrt(
+      (r - bgSample.r) ** 2 + (g - bgSample.g) ** 2 + (b - bgSample.b) ** 2
+    );
+    // Edge strength at this pixel
+    const edgeVal = edges[i];
+    // Position bonus: pixels near image edges are more likely UI
+    const x = i % width, y = Math.floor(i / width);
+    const distFromEdge = Math.min(x, width - 1 - x, y, height - 1 - y);
+    const edgeBonus = distFromEdge < height * 0.12 ? 40 : 0;
+    // Combined score: color distance + edge presence + position
+    uiScore[i] = colorDist * 0.4 + edgeVal * 0.5 + edgeBonus;
+  }
+
+  // Phase 4: Threshold the UI score to create initial binary mask
+  // Use Otsu-like adaptive thresholding: find the score that separates
+  // the top ~15% of pixels (likely UI) from the rest
+  const histogram = new Uint32Array(256);
+  for (let i = 0; i < total; i += 1) {
+    histogram[Math.min(255, Math.floor(uiScore[i]))] += 1;
+  }
+  let cumulative = 0;
+  let scoreThreshold = 255;
+  const targetPixels = total * 0.35; // UI is typically 15-35% of image
+  for (let t = 255; t >= 0; t -= 1) {
+    cumulative += histogram[t];
+    if (cumulative >= targetPixels) {
+      scoreThreshold = t;
+      break;
+    }
+  }
+  // Ensure minimum threshold to avoid including too much background
+  scoreThreshold = Math.max(scoreThreshold, 45);
+
+  // Phase 5: Build alpha from thresholded scores
+  const alpha = new Uint8ClampedArray(total);
+  for (let i = 0; i < total; i += 1) {
+    alpha[i] = uiScore[i] >= scoreThreshold ? 255 : 0;
+  }
+
+  // Phase 6: Clean up with morphological close (dilate then erode)
+  // to fill small holes in UI regions and connect nearby elements
+  let cleaned = dilateAlpha(alpha, width, height, 2);
+  cleaned = erodeAlpha(cleaned, width, height, 2);
+
+  // Phase 7: Remove tiny isolated fragments (noise)
+  // Re-use the existing flood-fill component detection
+  const seen = new Uint8Array(total);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const startIdx = y * width + x;
+      if (seen[startIdx] || cleaned[startIdx] === 0) continue;
+      // Flood-fill to find component size
+      const queue = [startIdx];
+      seen[startIdx] = 1;
+      let head = 0;
+      let count = 0;
+      const pixels = [];
+      while (head < queue.length) {
+        const ci = queue[head++];
+        count += 1;
+        pixels.push(ci);
+        const cx = ci % width, cy = Math.floor(ci / width);
+        if (cx > 0)          { const ni = ci - 1;     if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cx < width - 1)  { const ni = ci + 1;     if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cy > 0)          { const ni = ci - width;  if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+        if (cy < height - 1) { const ni = ci + width;  if (!seen[ni] && cleaned[ni] > 0) { seen[ni] = 1; queue.push(ni); } }
+      }
+      // Remove components smaller than 0.1% of image (noise/debris)
+      if (count < total * 0.001) {
+        for (const pi of pixels) cleaned[pi] = 0;
+      }
+    }
+  }
+
+  return cleaned;
+}
+
 // --- AI Remove (one-click workflow) ---
 
 async function aiRemoveWorkflow() {
@@ -1314,49 +1423,44 @@ async function aiRemoveWorkflow() {
   if (aiRemoveButton) aiRemoveButton.disabled = true;
   if (aiRemoveStatus) {
     aiRemoveStatus.style.display = "block";
-    aiRemoveStatus.textContent = "Step 1/2: Generating AI mask via ComfyUI...";
+    aiRemoveStatus.textContent = "Step 1/2: Detecting UI regions...";
   }
 
   try {
-    // Step 1: Generate AI mask (this also sets mode to AI + mask source to imported)
-    await generateComfyuiMask();
+    // Build source canvas for analysis
+    const sourceCanvas = createCanvas(loadedImage.width, loadedImage.height);
+    sourceCanvas.getContext("2d").drawImage(loadedImage, 0, 0);
+    const sourceData = sourceCanvas.getContext("2d").getImageData(0, 0, loadedImage.width, loadedImage.height);
+    const currentTone = bgTone ? bgTone.value : "dark";
 
-    // Verify mask was imported successfully
-    if (!importedAiMaskAlpha) {
-      throw new Error("AI mask generation did not produce a usable mask.");
-    }
+    // Step 1: Generate mask using hybrid edge+color detection (no ComfyUI needed)
+    const hybridAlpha = buildHybridUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
 
-    // Ensure settings are correct for the refinement pipeline
+    // Store as imported AI mask so the rest of the pipeline works
+    importedAiMaskAlpha = hybridAlpha;
+    rebuildImportedAiMaskCanvas();
+
+    // Set mode to AI with imported mask
     if (bgMode) { bgMode.value = "ai"; bgMode.dispatchEvent(new Event("change")); }
     if (bgMaskSource) { bgMaskSource.value = "ai"; bgMaskSource.dispatchEvent(new Event("change")); }
     if (bgDecontaminate) bgDecontaminate.checked = true;
-    // Reset refinement settings that could empty the mask
     if (bgAiInvertMask) bgAiInvertMask.checked = false;
     if (bgAiMaskExpand) bgAiMaskExpand.value = 0;
     if (bgAiMaskFeather) bgAiMaskFeather.value = 0;
 
-    // Validate mask coverage after refinement — if empty, try flipping polarity
+    // Validate coverage
     const testSettings = getBgSettings();
-    let testAlpha = getRefinedImportedAiAlpha(testSettings);
-    let coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
+    const testAlpha = getRefinedImportedAiAlpha(testSettings);
+    const coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
     if (coverage < 0.005) {
-      // Mask is empty after refinement — try inverting
-      for (let i = 0; i < importedAiMaskAlpha.length; i++) {
-        importedAiMaskAlpha[i] = 255 - importedAiMaskAlpha[i];
+      // Hybrid mask is empty — fall back to ComfyUI if connected
+      if (comfyuiConnected) {
+        if (aiRemoveStatus) aiRemoveStatus.textContent = "Hybrid detection found nothing — trying ComfyUI...";
+        await generateComfyuiMask();
+        if (!importedAiMaskAlpha) throw new Error("Both hybrid and ComfyUI mask generation failed.");
+      } else {
+        throw new Error("No UI regions detected. Try adjusting the background tone or using manual tools.");
       }
-      rebuildImportedAiMaskCanvas();
-      testAlpha = getRefinedImportedAiAlpha(testSettings);
-      coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
-      if (coverage < 0.005) {
-        throw new Error("AI mask is empty even after polarity correction. Try a different model.");
-      }
-    }
-    // If coverage is too high (>95%), the mask probably needs inverting
-    if (coverage > 0.95) {
-      for (let i = 0; i < importedAiMaskAlpha.length; i++) {
-        importedAiMaskAlpha[i] = 255 - importedAiMaskAlpha[i];
-      }
-      rebuildImportedAiMaskCanvas();
     }
 
     if (aiRemoveStatus) {
@@ -1364,10 +1468,7 @@ async function aiRemoveWorkflow() {
       aiRemoveStatus.style.color = "var(--accent)";
     }
 
-    // For dark backgrounds: auto-add keep boxes for common UI positions
-    // (top bar, bottom bar, icon strip). AI models often miss dark-toned
-    // UI elements that blend with scenic backgrounds.
-    const currentTone = bgTone ? bgTone.value : "dark";
+    // Auto-add keep boxes for common UI positions on dark backgrounds
     if (currentTone === "dark" && manualKeepBoxes.length === 0) {
       addPresetKeepBoxes("top");
       addPresetKeepBoxes("bottom");
