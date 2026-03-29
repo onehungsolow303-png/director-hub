@@ -84,3 +84,4 @@ Note: Due to Claude Code architecture, only YOU can spawn agents. The driver cre
 - Record ALL code changes to memory/code_changes.md via workers
 - Research before implementing — check what-worked.md and memory first
 - Make plans following .claude/rules/ before any implementation
+- Invoke /copyright-check on AI Remove pipeline outputs during Step 6 review — log findings to memory/security_log.md under ## Copyright Checks
