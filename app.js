@@ -1922,6 +1922,39 @@ function buildBlackBorderUiMask(sourceData, width, height) {
   }
   if (trappedCount > 0) console.log(`[v5+ RAG] Trapped background: ${trappedCount} enclosed regions identified as scene content`);
 
+  // ── Border-enclosed rescue pass ──
+  // User rule: "save everything inside border boundaries."
+  // If a BG-classified region is enclosed by borders AND has at least one
+  // UI-classified neighbor in the RAG, it belongs to a UI panel — rescue it.
+  // This protects panel interiors (chat fills, text areas) from being swept
+  // into background by the trapped-bg detector.
+  let rescueCount = 0;
+  let rescueChanged = true;
+  while (rescueChanged) {
+    rescueChanged = false;
+    for (const obj of objects) {
+      if (!bgLabels.has(obj.label)) continue;
+      if (obj.label === bgLabel) continue; // never rescue the primary background
+      if (obj.touchesEdge) continue;        // must be fully enclosed by borders
+
+      const neighbors = adjacency.get(obj.label);
+      if (!neighbors || neighbors.size === 0) continue;
+
+      // Check if ANY neighbor is UI (not background)
+      const hasUiNeighbor = [...neighbors].some(n => !bgLabels.has(n));
+      if (!hasUiNeighbor) continue;
+
+      // Rescue condition: region has a UI neighbor AND is bordered
+      // (high border contact means it's inside a border frame, not floating scene)
+      if (obj.borderContactRatio > 0.30) {
+        bgLabels.delete(obj.label);
+        rescueCount += 1;
+        rescueChanged = true;
+      }
+    }
+  }
+  if (rescueCount > 0) console.log(`[v5+ RAG] Border rescue: ${rescueCount} enclosed regions rescued back to UI`);
+
   // ══════════════════════════════════════════════════════════════════════
   // PASS 7: INVERT SELECTION
   // Selection = everything NOT background. This is the core of the
@@ -2029,6 +2062,40 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     if (!alpha[i]) continue;
     if (boundaryDist[i] < featherRadius) {
       alpha[i] = featherAlpha[boundaryDist[i]] || 255;
+    }
+  }
+
+  // ── Border-edge color repair ──
+  // Boundary pixels often carry scene colors (purple cave, dark rocks) that contaminate
+  // the extracted UI. Sample clean UI color from 3-6px inward and pull to edge pixels.
+  for (let i = 0; i < total; i += 1) {
+    if (boundaryDist[i] > 1 || !alpha[i]) continue; // only process outer 2px band
+    const cx = i % width, cy = (i - cx) / width;
+    const off = i * 4;
+    // Sample clean color from interior pixels (dist >= 3)
+    let sR = 0, sG = 0, sB = 0, sN = 0;
+    for (let r = 3; r <= 6; r += 1) {
+      for (const [dx, dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        const ni = ny * width + nx;
+        if (alpha[ni] === 255 && boundaryDist[ni] >= 3) {
+          const no = ni * 4;
+          sR += data[no]; sG += data[no + 1]; sB += data[no + 2]; sN += 1;
+        }
+      }
+      if (sN >= 4) break;
+    }
+    if (sN < 2) continue;
+    sR /= sN; sG /= sN; sB /= sN;
+    // Check if edge pixel color differs significantly from interior
+    const drift = Math.sqrt((data[off] - sR) ** 2 + (data[off + 1] - sG) ** 2 + (data[off + 2] - sB) ** 2);
+    if (drift > 18) {
+      // Pull interior color to edge with strong blend
+      const blend = Math.min(1, drift / 50);
+      data[off]     = Math.round(data[off]     * (1 - blend) + sR * blend);
+      data[off + 1] = Math.round(data[off + 1] * (1 - blend) + sG * blend);
+      data[off + 2] = Math.round(data[off + 2] * (1 - blend) + sB * blend);
     }
   }
 
