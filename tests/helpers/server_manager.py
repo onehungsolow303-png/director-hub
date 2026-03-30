@@ -82,6 +82,13 @@ def is_serve_stale(server_start_time, source_files=None):
     return False
 
 
+def _is_serve_cmdline(cmdline):
+    """Check if a process command line belongs to our serve.py."""
+    serve_py_str = str(SERVE_PY)
+    return any(arg == serve_py_str or arg.endswith("\\serve.py") or arg.endswith("/serve.py")
+               for arg in cmdline)
+
+
 def _find_serve_process():
     """Find a running serve.py process and return (pid, create_time) or None."""
     try:
@@ -91,7 +98,7 @@ def _find_serve_process():
     for proc in psutil.process_iter(["pid", "cmdline", "create_time"]):
         try:
             cmdline = proc.info["cmdline"] or []
-            if any("serve.py" in arg for arg in cmdline):
+            if _is_serve_cmdline(cmdline):
                 return proc.info["pid"], proc.info["create_time"]
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
@@ -107,7 +114,7 @@ def _kill_serve_process():
     for proc in psutil.process_iter(["pid", "cmdline"]):
         try:
             cmdline = proc.info["cmdline"] or []
-            if any("serve.py" in arg for arg in cmdline):
+            if _is_serve_cmdline(cmdline):
                 proc.terminate()
                 proc.wait(timeout=5)
                 print(f"  Terminated stale serve.py (PID {proc.info['pid']})")
@@ -187,6 +194,10 @@ def start_serve(comfyui_port=None):
             else:
                 print(f"  serve.py already running (PID {pid}), up to date")
                 return True
+        else:
+            # serve.py is running but we can't identify the process
+            print("  serve.py is running (could not determine PID)")
+            return True
 
     # Launch serve.py
     print(f"  Starting serve.py...")
