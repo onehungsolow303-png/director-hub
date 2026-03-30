@@ -15,10 +15,23 @@ import pytest
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
+from helpers.server_manager import ensure_services
+
 ROOT = Path(r"C:\Dev\Image generator")
 APP_URL = "http://127.0.0.1:8080"
 GOLDEN_DIR = ROOT / "tests" / "golden"
 REPORTS_DIR = ROOT / "tests" / "reports"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_services_ready():
+    """Auto-start ComfyUI + serve.py before any test that needs them.
+
+    Runs once per session. Detects already-running services and
+    restarts serve.py if source files changed since it started.
+    """
+    comfyui_port, serve_ok = ensure_services()
+    yield comfyui_port, serve_ok
 
 
 @pytest.fixture(scope="session")
