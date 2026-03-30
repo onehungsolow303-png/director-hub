@@ -8,6 +8,7 @@ Provides:
 - output_dir: Per-test output directory for screenshots/canvases
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -86,3 +87,42 @@ def dark_source_path():
 @pytest.fixture(scope="session")
 def light_source_path():
     return str(GOLDEN_DIR / "light_source.png")
+
+
+# ── Production test fixtures ──
+
+PROD_DARK_SOURCE = ROOT / "input" / "Example quality image extraction" / "Dark background examples" / "Original Image dark background.png"
+PROD_DARK_REF = ROOT / "input" / "Example quality image extraction" / "Dark background examples" / "example preview ectraction dark background removed.PNG"
+PROD_LIGHT_SOURCE = ROOT / "input" / "Example quality image extraction" / "Light background examples" / "Original Image White background.png"
+PROD_LIGHT_REF = ROOT / "input" / "Example quality image extraction" / "Light background examples" / "example preview ectraction white background removed.PNG"
+PROD_ITERATIONS_PATH = REPORTS_DIR / "production_iterations.json"
+
+
+@pytest.fixture(scope="session")
+def prod_dark_source():
+    return str(PROD_DARK_SOURCE)
+
+
+@pytest.fixture(scope="session")
+def prod_dark_ref():
+    return Image.open(PROD_DARK_REF).convert("RGBA")
+
+
+@pytest.fixture(scope="session")
+def prod_light_source():
+    return str(PROD_LIGHT_SOURCE)
+
+
+@pytest.fixture(scope="session")
+def prod_light_ref():
+    return Image.open(PROD_LIGHT_REF).convert("RGBA")
+
+
+@pytest.fixture(scope="session")
+def prod_tier():
+    """Read current quality tier from production iterations state file."""
+    if PROD_ITERATIONS_PATH.exists():
+        with open(PROD_ITERATIONS_PATH) as f:
+            state = json.load(f)
+        return state.get("current_tier", 1)
+    return 1
