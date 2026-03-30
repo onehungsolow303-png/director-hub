@@ -59,9 +59,9 @@ def main(args=None):
         )
         return result.returncode
 
-    # Run pytest with forwarded args
+    # Run pytest from tests/ dir so pytest.ini is found automatically
     pytest_args = [VENV_PYTHON, "-m", "pytest"] + args
-    result = subprocess.run(pytest_args, cwd=str(ROOT))
+    result = subprocess.run(pytest_args, cwd=str(ROOT / "tests"))
     return result.returncode
 
 
