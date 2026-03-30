@@ -20,8 +20,10 @@ from helpers.app_driver import (
     open_advanced_settings,
     select_preset,
     run_ai_remove,
+    run_process_image,
     run_enhance,
 )
+from helpers.canvas_extract import extract_processed_layout
 from helpers.canvas_extract import extract_canvas, save_canvas_to_file
 from helpers.quality_metrics import (
     alpha_iou,
@@ -91,6 +93,32 @@ def _run_and_extract(page, source_path, preset, out_dir):
     return enhanced_img, status
 
 
+def _run_and_extract_light(page, source_path, preset, out_dir):
+    """Upload image, run Process Image (light mode), extract result canvas."""
+    load_app(page)
+    upload_image(page, source_path)
+    open_advanced_settings(page)
+    select_preset(page, preset)
+
+    status = run_process_image(page, timeout=30)
+    if "FAIL" in status or "TIMEOUT" in status:
+        page.screenshot(path=str(out_dir / "failed.png"))
+        return None, status
+
+    page.screenshot(path=str(out_dir / "01_after_process.png"))
+
+    # Try processedLayoutCanvas first, then resultCanvas
+    result_img = extract_processed_layout(page)
+    if result_img:
+        result_img.save(str(out_dir / "processed_layout.png"), "PNG")
+    else:
+        result_img = extract_canvas(page, "#resultCanvas")
+        if result_img:
+            result_img.save(str(out_dir / "result_canvas.png"), "PNG")
+
+    return result_img, status
+
+
 def _compare_and_report(test_img, ref_img, out_dir, test_name):
     """Compare extraction against reference, save metrics and diff."""
     iou = alpha_iou(test_img, ref_img)
@@ -156,8 +184,8 @@ def test_production_light(page, prod_light_source, prod_light_ref, prod_tier, ou
     out_dir = REPORTS_DIR / "diffs" / "test_production_light"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    enhanced_img, status = _run_and_extract(page, prod_light_source,
-                                             "light-balanced", out_dir)
+    enhanced_img, status = _run_and_extract_light(page, prod_light_source,
+                                                    "light-balanced", out_dir)
     assert enhanced_img is not None, f"Extraction failed: {status}"
 
     metrics = _compare_and_report(enhanced_img, prod_light_ref, out_dir,
