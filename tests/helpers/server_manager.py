@@ -8,10 +8,8 @@ Handles:
 
 import os
 import subprocess
-import sys
 import time
 import urllib.request
-import urllib.error
 from pathlib import Path
 
 ROOT = Path(r"C:\Dev\Image generator")
