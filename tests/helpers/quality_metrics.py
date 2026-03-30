@@ -91,8 +91,15 @@ def compute_ssim(test_img: Image.Image, ref_img: Image.Image) -> float:
     from skimage.metrics import structural_similarity
     if test_img.size != ref_img.size:
         test_img = test_img.resize(ref_img.size, Image.LANCZOS)
-    t_gray = np.array(test_img.convert("L"))
-    r_gray = np.array(ref_img.convert("L"))
+    # Normalize transparent pixels: zero RGB where alpha=0 in both images.
+    # Without this, hidden RGB values (white matte in reference, black in test)
+    # dominate the score despite being visually identical (both fully transparent).
+    t_arr = np.array(test_img.convert("RGBA"))
+    r_arr = np.array(ref_img.convert("RGBA"))
+    t_arr[t_arr[:, :, 3] == 0, :3] = 0
+    r_arr[r_arr[:, :, 3] == 0, :3] = 0
+    t_gray = np.array(Image.fromarray(t_arr).convert("L"))
+    r_gray = np.array(Image.fromarray(r_arr).convert("L"))
     min_dim = min(t_gray.shape)
     win_size = min(7, min_dim if min_dim % 2 == 1 else min_dim - 1)
     if win_size < 3:
@@ -105,8 +112,11 @@ def compute_psnr(test_img: Image.Image, ref_img: Image.Image) -> float:
     from skimage.metrics import peak_signal_noise_ratio
     if test_img.size != ref_img.size:
         test_img = test_img.resize(ref_img.size, Image.LANCZOS)
+    # Normalize transparent pixels before comparison (same fix as SSIM)
     t_arr = np.array(test_img.convert("RGBA"))
     r_arr = np.array(ref_img.convert("RGBA"))
+    t_arr[t_arr[:, :, 3] == 0, :3] = 0
+    r_arr[r_arr[:, :, 3] == 0, :3] = 0
     mse = np.mean((t_arr.astype(float) - r_arr.astype(float)) ** 2)
     if mse == 0:
         return float("inf")

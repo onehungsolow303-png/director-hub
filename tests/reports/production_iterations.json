@@ -1,24 +1,18 @@
 {
-  "current_iteration": 2,
+  "current_iteration": 1,
   "current_tier": 1,
   "focus": "dark",
   "history": [
     {
       "iteration": 1,
-      "date": "2026-03-29T19:17:23.891509",
-      "tier": 1,
-      "scope": "params",
-      "focus": "dark",
-      "result": "needs_improvement",
-      "failures": [
-        "dark_ssim=0.0977 (need 0.3)"
-      ],
+      "date": "2026-03-29T19:33:59.570581",
+      "result": "success",
       "metrics": {
         "dark": {
           "alpha_iou": 0.9653,
           "alpha_mae": 6.24,
-          "ssim": 0.0977,
-          "psnr_db": 2.96,
+          "ssim": 0.7596,
+          "psnr_db": 19.6,
           "phash_distance": 28,
           "alpha_stats": {
             "transparent": 66.82,
@@ -34,8 +28,8 @@
         "light": {
           "alpha_iou": 0.9971,
           "alpha_mae": 0.6,
-          "ssim": 0.3917,
-          "psnr_db": 3.43,
+          "ssim": 0.9936,
+          "psnr_db": 30.36,
           "phash_distance": 16,
           "alpha_stats": {
             "transparent": 60.4,
@@ -48,15 +42,14 @@
             "opaque": 38.93
           }
         }
-      },
-      "improved": false
+      }
     }
   ],
   "best_dark": {
     "alpha_iou": 0.9653,
     "alpha_mae": 6.24,
-    "ssim": 0.0977,
-    "psnr_db": 2.96,
+    "ssim": 0.7596,
+    "psnr_db": 19.6,
     "phash_distance": 28,
     "alpha_stats": {
       "transparent": 66.82,
@@ -72,8 +65,8 @@
   "best_light": {
     "alpha_iou": 0.9971,
     "alpha_mae": 0.6,
-    "ssim": 0.3917,
-    "psnr_db": 3.43,
+    "ssim": 0.9936,
+    "psnr_db": 30.36,
     "phash_distance": 16,
     "alpha_stats": {
       "transparent": 60.4,
