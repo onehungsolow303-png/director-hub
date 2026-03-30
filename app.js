@@ -1900,13 +1900,25 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     // PROTECT UI-shaped regions — never classify as secondary background
     if (hasUiShape(obj)) continue;
 
+    // Side-edge bias: regions touching ONLY left/right (not top/bottom) are very likely scene.
+    // Game UIs have horizontal bars at top/bottom, not vertical panels on sides.
+    const touchesSideOnly = (obj.touchesLeft || obj.touchesRight) && !obj.touchesTop && !obj.touchesBottom;
+    const sideVarThreshold = touchesSideOnly ? 0.40 : 0.65;
+
     // Large, high-variance, edge-touching → secondary background
-    if (obj.touchesEdge && obj.colorVariance > bgColorVar * 0.65 && obj.pixelCount > total * 0.01) {
+    if (obj.touchesEdge && obj.colorVariance > bgColorVar * sideVarThreshold && obj.pixelCount > total * 0.01) {
       bgLabels.add(obj.label);
+      continue;
+    }
+    // Medium side-touching regions with moderate variance → likely scene
+    if (touchesSideOnly && obj.colorVariance > bgColorVar * 0.30 && obj.pixelCount > total * 0.005) {
+      bgLabels.add(obj.label);
+      continue;
     }
     // Very small fragments touching edge with high variance → background noise
     if (obj.touchesEdge && obj.pixelCount < total * 0.003 && obj.colorVariance > bgColorVar * 0.5) {
       bgLabels.add(obj.label);
+      continue;
     }
     // Non-edge-touching game content fragments (expanded: up to 3% of image)
     if (!obj.touchesEdge && obj.colorVariance > bgColorVar * 0.6 && obj.pixelCount < total * 0.03 && obj.rectangularity < 0.45) {
@@ -2123,37 +2135,38 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     }
   }
 
-  // ── Border-edge color repair ──
-  // Boundary pixels often carry scene colors (purple cave, dark rocks) that contaminate
-  // the extracted UI. Sample clean UI color from 3-6px inward and pull to edge pixels.
-  for (let i = 0; i < total; i += 1) {
-    if (boundaryDist[i] > 1 || !alpha[i]) continue; // only process outer 2px band
-    const cx = i % width, cy = (i - cx) / width;
-    const off = i * 4;
-    // Sample clean color from interior pixels (dist >= 3)
-    let sR = 0, sG = 0, sB = 0, sN = 0;
-    for (let r = 3; r <= 6; r += 1) {
-      for (const [dx, dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]) {
-        const nx = cx + dx, ny = cy + dy;
-        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-        const ni = ny * width + nx;
-        if (alpha[ni] === 255 && boundaryDist[ni] >= 3) {
-          const no = ni * 4;
-          sR += data[no]; sG += data[no + 1]; sB += data[no + 2]; sN += 1;
+  // ── Border-edge color repair (2 passes) ──
+  // Boundary pixels carry scene colors (purple cave, dark rocks). Sample clean
+  // UI color from deep interior and pull to edge pixels. Run twice for coverage.
+  for (let repairPass = 0; repairPass < 2; repairPass += 1) {
+    for (let i = 0; i < total; i += 1) {
+      if (boundaryDist[i] > 2 || !alpha[i]) continue; // outer 3px band
+      const cx = i % width, cy = (i - cx) / width;
+      const off = i * 4;
+      // Sample clean color from interior pixels (dist >= 4)
+      let sR = 0, sG = 0, sB = 0, sN = 0;
+      for (let r = 4; r <= 8; r += 1) {
+        for (const [dx, dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+          const ni = ny * width + nx;
+          if (alpha[ni] === 255 && boundaryDist[ni] >= 4) {
+            const no = ni * 4;
+            sR += data[no]; sG += data[no + 1]; sB += data[no + 2]; sN += 1;
+          }
         }
+        if (sN >= 6) break;
       }
-      if (sN >= 4) break;
-    }
-    if (sN < 2) continue;
-    sR /= sN; sG /= sN; sB /= sN;
-    // Check if edge pixel color differs significantly from interior
-    const drift = Math.sqrt((data[off] - sR) ** 2 + (data[off + 1] - sG) ** 2 + (data[off + 2] - sB) ** 2);
-    if (drift > 18) {
-      // Pull interior color to edge with strong blend
-      const blend = Math.min(1, drift / 50);
-      data[off]     = Math.round(data[off]     * (1 - blend) + sR * blend);
-      data[off + 1] = Math.round(data[off + 1] * (1 - blend) + sG * blend);
-      data[off + 2] = Math.round(data[off + 2] * (1 - blend) + sB * blend);
+      if (sN < 2) continue;
+      sR /= sN; sG /= sN; sB /= sN;
+      // Check if edge pixel color differs from interior
+      const drift = Math.sqrt((data[off] - sR) ** 2 + (data[off + 1] - sG) ** 2 + (data[off + 2] - sB) ** 2);
+      if (drift > 12) {
+        const blend = Math.min(1, drift / 35);
+        data[off]     = Math.round(data[off]     * (1 - blend) + sR * blend);
+        data[off + 1] = Math.round(data[off + 1] * (1 - blend) + sG * blend);
+        data[off + 2] = Math.round(data[off + 2] * (1 - blend) + sB * blend);
+      }
     }
   }
 

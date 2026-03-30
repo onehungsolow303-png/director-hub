@@ -20,7 +20,7 @@
     "alpha_iou": 0.9971,
     "alpha_mae": 0.6,
     "ssim": 0.9936,
-    "psnr_db": 30.36,
+    "psnr_db": 30.38,
     "phash_distance": 16,
     "alpha_stats": {
       "transparent": 60.4,
