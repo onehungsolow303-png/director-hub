@@ -12,12 +12,15 @@ Usage:
 Requires: server running at http://127.0.0.1:8080
 """
 
+import atexit
 import json
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
+
+from helpers.server_manager import ensure_services, shutdown
 
 ROOT = Path(r"C:\Dev\Image generator")
 VENV_PYTHON = str(ROOT / ".venv" / "Scripts" / "python.exe")
@@ -150,6 +153,12 @@ def print_metrics(metrics):
 
 
 def main():
+    # Boot services (ComfyUI + serve.py)
+    comfyui_port, serve_ok = ensure_services()
+    if not serve_ok:
+        print("FATAL: serve.py failed to start. Cannot run production loop.")
+        return False
+
     print("===================================================")
     print("  Gut It Out — Production Quality Loop")
     print("  Max iterations: 10 | Dark first, then light")
@@ -271,5 +280,6 @@ def main():
 
 
 if __name__ == "__main__":
+    atexit.register(shutdown)
     success = main()
     sys.exit(0 if success else 1)
