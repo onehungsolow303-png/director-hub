@@ -1880,10 +1880,14 @@ function buildBlackBorderUiMask(sourceData, width, height) {
   function hasUiShape(obj) {
     const bw = obj.maxX - obj.minX + 1, bh = obj.maxY - obj.minY + 1;
     const wR = bw / width, hR = bh / height, asp = bw / Math.max(1, bh);
-    const geoMatch = (asp >= 3 && hR <= 0.25) ||          // thin horizontal bar
-                     (wR >= 0.4 && hR <= 0.40) ||          // wide bar
-                     (wR <= 0.25 && hR <= 0.25 && wR >= 0.05) || // compact square panel
-                     (obj.rectangularity >= 0.55);          // highly rectangular
+    // Thin horizontal bars must touch top or bottom edge — floating thin strips are scene
+    const isThinBar = asp >= 3 && hR <= 0.25;
+    const isWideBar = wR >= 0.4 && hR <= 0.40;
+    const isCompactPanel = wR <= 0.25 && hR <= 0.25 && wR >= 0.05;
+    const isRectangular = obj.rectangularity >= 0.55;
+    // For thin/wide bars: require edge contact (bars anchor to top/bottom)
+    const barNeedsEdge = (isThinBar || isWideBar) && !obj.touchesTop && !obj.touchesBottom;
+    const geoMatch = ((isThinBar || isWideBar) && !barNeedsEdge) || isCompactPanel || isRectangular;
     if (!geoMatch) return false;
     // Content check: UI has low variance OR low interior detail relative to background
     if (obj.colorVariance < bgColorVar * 0.55) return true;           // low variance = UI fill
@@ -2134,6 +2138,35 @@ function buildBlackBorderUiMask(sourceData, width, height) {
       alpha[i] = featherAlpha[boundaryDist[i]] || 255;
     }
   }
+
+  // ── Remove floating debris ──
+  // Semi-transparent pixels disconnected from any fully opaque UI pixel
+  // are scene content accidentally included in the mask. Remove them.
+  const hasOpaqueNeighbor = new Uint8Array(total);
+  // Mark pixels within 3px of a fully opaque pixel
+  for (let i = 0; i < total; i += 1) {
+    if (alpha[i] === 255) hasOpaqueNeighbor[i] = 1;
+  }
+  for (let pass = 0; pass < 3; pass += 1) {
+    const prev = new Uint8Array(hasOpaqueNeighbor);
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const idx = y * width + x;
+        if (hasOpaqueNeighbor[idx]) continue;
+        if (!alpha[idx]) continue;
+        if (prev[idx - 1] || prev[idx + 1] || prev[idx - width] || prev[idx + width]) {
+          hasOpaqueNeighbor[idx] = 1;
+        }
+      }
+    }
+  }
+  let debrisRemoved = 0;
+  for (let i = 0; i < total; i += 1) {
+    if (alpha[i] > 0 && alpha[i] < 255 && !hasOpaqueNeighbor[i]) {
+      alpha[i] = 0; debrisRemoved += 1;
+    }
+  }
+  if (debrisRemoved > 0) console.log(`[v5+] Debris cleanup: removed ${debrisRemoved} floating semi-transparent pixels`);
 
   // ── Border-edge color repair (2 passes) ──
   // Boundary pixels carry scene colors (purple cave, dark rocks). Sample clean
@@ -4610,14 +4643,14 @@ function repairOpaqueEdgePixels(imageData, backgroundSample) {
   const isOuterEdgePixel = (x, y) => {
     const index = y * width + x;
     const offset = index * 4;
-    if (source[offset + 3] < 235) return false;
+    if (source[offset + 3] < 100) return false; // include soft-edge pixels (128, 192)
     const neighbors = [
       x > 0 ? ((index - 1) * 4) + 3 : -1,
       x < width - 1 ? ((index + 1) * 4) + 3 : -1,
       y > 0 ? ((index - width) * 4) + 3 : -1,
       y < height - 1 ? ((index + width) * 4) + 3 : -1
     ];
-    return neighbors.some((alphaOffset) => alphaOffset < 0 || source[alphaOffset] < 180);
+    return neighbors.some((alphaOffset) => alphaOffset < 0 || source[alphaOffset] < 100);
   };
 
   for (let y = 1; y < height - 1; y += 1) {
