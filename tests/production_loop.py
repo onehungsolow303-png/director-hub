@@ -77,7 +77,7 @@ def save_state(state):
 
 def run_regression():
     """Run full 42-test regression suite. Returns True if all pass."""
-    print("\n══ REGRESSION GATE ══")
+    print("\n== REGRESSION GATE ==")
     result = subprocess.run(
         [VENV_PYTHON, "-m", "pytest",
          "tests/test_smoke.py", "tests/test_unit_metrics.py",
@@ -98,7 +98,7 @@ def run_regression():
 
 def run_production_test():
     """Run production test. Returns metrics dict or None on failure."""
-    print("\n══ PRODUCTION TEST ══")
+    print("\n== PRODUCTION TEST ==")
     result = subprocess.run(
         [VENV_PYTHON, "-m", "pytest",
          "tests/test_production.py", "-v", "--tb=short"],
@@ -150,10 +150,10 @@ def print_metrics(metrics):
 
 
 def main():
-    print("═══════════════════════════════════════════════════")
+    print("===================================================")
     print("  Gut It Out — Production Quality Loop")
     print("  Max iterations: 10 | Dark first, then light")
-    print("═══════════════════════════════════════════════════")
+    print("===================================================")
 
     state = load_state()
     no_improvement_count = 0
@@ -165,14 +165,14 @@ def main():
         state["current_tier"] = tier
         save_state(state)
 
-        print(f"\n{'═' * 50}")
+        print(f"\n{'=' * 50}")
         print(f"  ITERATION {iteration}/{MAX_ITERATIONS}")
         print(f"  Tier: {tier} | Scope: {scope} | Focus: {state['focus']}")
-        print(f"{'═' * 50}")
+        print(f"{'=' * 50}")
 
         # Step 1: Regression gate
         if not run_regression():
-            print("\n✘ REGRESSION FAILURE — stopping loop")
+            print("\nX REGRESSION FAILURE — stopping loop")
             print("  Fix the regression before continuing.")
             state["history"].append({
                 "iteration": iteration,
@@ -185,7 +185,7 @@ def main():
         # Step 2: Production test
         metrics = run_production_test()
         if metrics is None:
-            print("\n✘ Production test produced no report — stopping")
+            print("\nX Production test produced no report — stopping")
             return False
 
         print("\n  Current metrics:")
@@ -205,7 +205,7 @@ def main():
                 state["best_light"] = light_m
 
         if passed:
-            print("\n✔ ALL TARGETS MET — production quality achieved!")
+            print("\nOK ALL TARGETS MET — production quality achieved!")
             state["history"].append({
                 "iteration": iteration,
                 "date": datetime.now().isoformat(),
@@ -228,7 +228,7 @@ def main():
             no_improvement_count += 1
 
         if no_improvement_count >= PLATEAU_TRIGGER and scope != "structural":
-            print(f"\n  ⚠ No improvement for {PLATEAU_TRIGGER} iterations — escalating early")
+            print(f"\n  !! No improvement for {PLATEAU_TRIGGER} iterations — escalating early")
 
         # Log iteration
         state["history"].append({
@@ -250,7 +250,7 @@ def main():
         print(f"\n  Scope: {scope}")
         print(f"  Agent should make ONE targeted change to app.js")
         print(f"  Focus on: {state['focus']} background extraction")
-        print(f"\n  ⏸  Waiting for fix agent (iteration {iteration})...")
+        print(f"\n  ||  Waiting for fix agent (iteration {iteration})...")
         print(f"  Run the fix, then restart this script to continue.")
 
         state["current_iteration"] = iteration + 1
@@ -260,7 +260,7 @@ def main():
         # For now, stop and let the user/agent make the fix.
         return False
 
-    print(f"\n✘ Max iterations ({MAX_ITERATIONS}) reached")
+    print(f"\nX Max iterations ({MAX_ITERATIONS}) reached")
     print("  Best metrics achieved:")
     if state["best_dark"]:
         print(f"  Dark: IoU={state['best_dark']['alpha_iou']:.4f}")

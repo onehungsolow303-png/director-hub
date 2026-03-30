@@ -25,7 +25,7 @@ class TestServerHealth:
         req = urllib.request.Request(APP_URL)
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read().decode()
-            assert "Asset Editor" in body or "Game UI" in body
+            assert "Gut It Out" in body or "Asset Editor" in body or "Game UI" in body
 
     def test_app_js_served(self):
         """app.js should be accessible."""
