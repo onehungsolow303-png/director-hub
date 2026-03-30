@@ -1729,6 +1729,9 @@ function buildBlackBorderUiMask(sourceData, width, height) {
   // that the gradient detector misses when both sides are dark.
   let structBorderCount = 0;
   for (let y = 0; y < height; y += 1) {
+    // Only apply in top 25% and bottom 35% — UI bars live at edges, not in scene center
+    const yRatio = y / height;
+    if (yRatio > 0.25 && yRatio < 0.65) continue;
     // Count dark achromatic pixels in this row that aren't already borders
     let darkRun = 0, maxDarkRun = 0, darkTotal = 0;
     for (let x = 0; x < width; x += 1) {
@@ -2008,8 +2011,8 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     if (!bgLabels.has(obj.label)) continue;
     if (obj.label === bgLabel) continue;
     const objCenterY = (obj.minY + obj.maxY) / 2 / height;
-    // Rescue if: centered below 60% of image AND has border contact AND not tiny
-    if (objCenterY > 0.60 && obj.borderContactRatio > 0.15 && obj.pixelCount > total * 0.002) {
+    // Rescue if: centered below 70% of image AND has significant border contact AND not tiny
+    if (objCenterY > 0.70 && obj.borderContactRatio > 0.20 && obj.pixelCount > total * 0.002) {
       bgLabels.delete(obj.label);
       bottomRescueCount += 1;
     }
