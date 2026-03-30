@@ -1,6 +1,6 @@
 """Smoke tests — fast sanity checks that the server and app are working.
 
-Run: .venv/Scripts/python.exe -m pytest tests/test_smoke.py -v -m smoke
+Run: .venv/Scripts/python.exe tests/launcher.py tests/test_smoke.py -v -m smoke
 """
 
 import urllib.request

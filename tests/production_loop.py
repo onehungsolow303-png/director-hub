@@ -7,9 +7,7 @@ Runs a 10-iteration improvement loop:
 4. Repeat until quality targets met or iterations exhausted
 
 Usage:
-    .venv/Scripts/python.exe tests/production_loop.py
-
-Requires: server running at http://127.0.0.1:8080
+    .venv/Scripts/python.exe tests/launcher.py --production-loop
 """
 
 import atexit

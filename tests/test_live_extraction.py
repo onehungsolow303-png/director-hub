@@ -3,7 +3,7 @@
 Parameterized across all 6 presets × 2 source images.
 Each test: upload image → select preset → run extraction → extract canvas → save output.
 
-Run: .venv/Scripts/python.exe -m pytest tests/test_live_extraction.py -v -m live
+Run: .venv/Scripts/python.exe tests/launcher.py tests/test_live_extraction.py -v -m live
 """
 
 import json

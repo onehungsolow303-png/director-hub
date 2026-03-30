@@ -4,7 +4,7 @@ user-verified reference extraction examples.
 Uploads real source images through the browser, runs AI Remove + Enhance,
 extracts #aiEnhancedCanvas, and compares against reference using quality metrics.
 
-Run: .venv/Scripts/python.exe -m pytest tests/test_production.py -v
+Run: .venv/Scripts/python.exe tests/launcher.py tests/test_production.py -v
 """
 
 import json
