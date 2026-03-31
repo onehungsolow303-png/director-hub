@@ -77,3 +77,127 @@ def test_edge_techniques_produce_output():
         assert result.dtype == np.float32, f"{tid} wrong dtype: {result.dtype}"
         assert result.max() > 0, f"{tid} returned all zeros on image with clear edge"
         assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_color_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.color import TECHNIQUES
+    img = np.zeros((50, 50, 3), dtype=np.uint8)
+    img[:, :25, :] = [40, 30, 25]
+    img[:, 25:, :] = [200, 180, 160]
+    # Add achromatic dark border so dark/achromatic detectors fire
+    img[0:4, :, :] = [15, 15, 15]
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (50, 50), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_morphological_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.morphological import TECHNIQUES
+    img = np.full((80, 80, 3), 200, dtype=np.uint8)
+    img[10:70, 10:70, :] = 100
+    img[8:12, 8:72, :] = 30; img[68:72, 8:72, :] = 30
+    img[8:72, 8:12, :] = 30; img[8:72, 68:72, :] = 30
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (80, 80), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_texture_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.texture import TECHNIQUES
+    img = np.random.randint(50, 200, (60, 60, 3), dtype=np.uint8)
+    img[:, 30:, :] = 128
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (60, 60), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_statistical_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.statistical import TECHNIQUES
+    img = np.random.randint(50, 200, (60, 60, 3), dtype=np.uint8)
+    img[:, 30:, :] = 128
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (60, 60), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_gradient_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.gradient import TECHNIQUES
+    img = np.full((60, 60, 3), 50, dtype=np.uint8)
+    img[15:45, 15:45, :] = 200
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (60, 60), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_structural_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.structural import TECHNIQUES
+    import cv2 as cv2_test
+    img = np.full((80, 80, 3), 220, dtype=np.uint8)
+    cv2_test.rectangle(img, (10, 10), (70, 70), (30, 30, 30), 3)
+    cv2_test.rectangle(img, (20, 20), (60, 60), (30, 30, 30), 3)
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (80, 80), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_adaptive_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.adaptive import TECHNIQUES
+    import cv2 as cv2_test
+    img = np.zeros((64, 64, 3), dtype=np.uint8)
+    img[:, 32:, :] = 255
+    noise = np.random.randint(0, 30, img.shape, dtype=np.uint8)
+    img = cv2_test.add(img, noise)
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (64, 64), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
+
+
+def test_quantization_techniques_produce_output():
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.quantization import TECHNIQUES
+    img = np.full((60, 60, 3), 200, dtype=np.uint8)
+    img[10:50, 10:50, :] = 100
+    img[8:12, 8:52, :] = 30; img[48:52, 8:52, :] = 30
+    img[8:52, 8:12, :] = 30; img[8:52, 48:52, :] = 30
+    preprocessed = preprocess(img)
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (60, 60), f"{tid} wrong shape"
+        assert result.dtype == np.float32, f"{tid} wrong dtype"
+        assert result.max() > 0, f"{tid} returned all zeros"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
