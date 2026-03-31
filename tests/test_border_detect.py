@@ -59,3 +59,21 @@ def test_api_endpoint_handler():
     assert "border_map" in response
     assert "techniques_run" in response
     assert response["techniques_run"] >= 40
+
+
+def test_edge_techniques_produce_output():
+    """Each edge technique should return a (H, W) float32 array with some non-zero values."""
+    from border_detect.preprocess import preprocess
+    from border_detect.techniques.edge import TECHNIQUES
+    import cv2
+
+    img = np.zeros((50, 50, 3), dtype=np.uint8)
+    img[:, 25:, :] = 255
+    preprocessed = preprocess(img)
+
+    for tid, fn in TECHNIQUES:
+        result = fn(preprocessed)
+        assert result.shape == (50, 50), f"{tid} wrong shape: {result.shape}"
+        assert result.dtype == np.float32, f"{tid} wrong dtype: {result.dtype}"
+        assert result.max() > 0, f"{tid} returned all zeros on image with clear edge"
+        assert 0.0 <= result.min() and result.max() <= 1.0, f"{tid} out of range"
