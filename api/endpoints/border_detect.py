@@ -93,6 +93,13 @@ def _build_diagnostics(per_technique, final_map, reference_path, v5_b64, current
             pass
 
     h, w = final_map.shape[:2]
+
+    # Resize reference and v5 masks to match detection output dimensions
+    if ref_mask is not None and ref_mask.shape[:2] != (h, w):
+        ref_mask = cv2.resize(ref_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+    if v5_mask is not None and v5_mask.shape[:2] != (h, w):
+        v5_mask = cv2.resize(v5_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+
     consensus = np.zeros((h, w), dtype=np.int32)
     for output in per_technique.values():
         consensus += (output > 0.5).astype(np.int32)

@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "last_updated": "2026-03-30T19:53:25.274623",
+  "technique_weights": {
+    "edge_sobel": 0.0626861644990349,
+    "edge_scharr": 0.06114559512580933,
+    "edge_prewitt": 0.06262494939757919,
+    "edge_roberts": 0.045271154338777514,
+    "edge_log": 0.007709306260267963,
+    "edge_dog": 0.006808448515803868,
+    "edge_canny": 0.020467730326482456,
+    "edge_phase": 0.010177833580917613,
+    "color_hsv_dark": 0.004894124636177682,
+    "color_lab_delta": 0.06530514990296228,
+    "color_ycbcr_luma": 0.0626861644990349,
+    "color_rgb_gradient": 0.06225017778262889,
+    "color_achromatic": 0.004894124636177682,
+    "morph_gradient": 0.02522812116068495,
+    "morph_blackhat": 0.008294744748971702,
+    "morph_close_gaps": 0.021451785384313693,
+    "morph_tophat": 0.013118452153817203,
+    "morph_width_probe": 0.0203439207120647,
+    "tex_lbp": 0.03726536545378553,
+    "tex_gabor": 0.011322559647689448,
+    "tex_glcm": 0.004894124636177682,
+    "tex_laws": 0.07794150671527963,
+    "stat_variance": 0.03312984139939078,
+    "stat_entropy": 0.01933871739536356,
+    "stat_mahalanobis": 0.008746340853720062,
+    "stat_mean_diff": 0.016557098514667367,
+    "grad_structure": 0.011692479007218948,
+    "grad_harris": 0.004894124636177682,
+    "grad_hog": 0.03992634260656894,
+    "struct_contour": 0.004894124636177682,
+    "struct_ccl": 0.024912251987345473,
+    "struct_distance": 0.004894124636177682,
+    "struct_watershed": 0.027550674192466786,
+    "adapt_sauvola": 0.006924441740539139,
+    "adapt_niblack": 0.021561114729546093,
+    "freq_fft_highpass": 0.006895878338319343,
+    "freq_wavelet": 0.03385342481893018,
+    "quant_median": 0.012128439810534042,
+    "quant_kmeans": 0.014912207319992734,
+    "quant_slic": 0.01040686926242472
+  },
+  "technique_scores": {
+    "edge_sobel": {
+      "iou_vs_reference": 0.0025730328434776088,
+      "iou_vs_consensus": 0.6594640168623909,
+      "composite": 0.33101852485293426
+    },
+    "edge_scharr": {
+      "iou_vs_reference": 0.002567052625309156,
+      "iou_vs_consensus": 0.6499922268329725,
+      "composite": 0.32627963972914087
+    },
+    "edge_prewitt": {
+      "iou_vs_reference": 0.0025286135792806424,
+      "iou_vs_consensus": 0.6494119926847287,
+      "composite": 0.3259703031320047
+    },
+    "edge_roberts": {
+      "iou_vs_reference": 0.002096261408677598,
+      "iou_vs_consensus": 0.4532730956428588,
+      "composite": 0.22768467852576818
+    },
+    "edge_log": {
+      "iou_vs_reference": 0.00034538960972437617,
+      "iou_vs_consensus": 0.04009889701028577,
+      "composite": 0.02022214331000507
+    },
+    "edge_dog": {
+      "iou_vs_reference": 0.0007008457712454038,
+      "iou_vs_consensus": 0.029926677946982515,
+      "composite": 0.01531376185911396
+    },
+    "edge_canny": {
+      "iou_vs_reference": 0.0021219077524272933,
+      "iou_vs_consensus": 0.21557098100268265,
+      "composite": 0.10884644437755497
+    },
+    "edge_phase": {
+      "iou_vs_reference": 0.0005627858697330393,
+      "iou_vs_consensus": 0.05938968799452042,
+      "composite": 0.02997623693212673
+    },
+    "color_hsv_dark": {
+      "iou_vs_reference": 0.0,
+      "iou_vs_consensus": 0.0014686216448562422,
+      "composite": 0.0007343108224281211
+    },
+    "color_lab_delta": {
+      "iou_vs_reference": 0.0027493281343561014,
+      "iou_vs_consensus": 0.6370634091107047,
+      "composite": 0.3199063686225304
+    },
+    "color_ycbcr_luma": {
+      "iou_vs_reference": 0.0025730328434776088,
+      "iou_vs_consensus": 0.6594640168623909,
+      "composite": 0.33101852485293426
+    },
+    "color_rgb_gradient": {
+      "iou_vs_reference": 0.0026941451400699025,
+      "iou_vs_consensus": 0.6067916748705713,
+      "composite": 0.3047429100053206
+    },
+    "color_achromatic": {
+      "iou_vs_reference": 0.0,
+      "iou_vs_consensus": 0.0019133967207323893,
+      "composite": 0.0009566983603661946
+    },
+    "morph_gradient": {
+      "iou_vs_reference": 0.0008823048986328622,
+      "iou_vs_consensus": 0.20976969519914304,
+      "composite": 0.10532600004888795
+    },
+    "morph_blackhat": {
+      "iou_vs_reference": 2.3569322170263185e-05,
+      "iou_vs_consensus": 0.03538264433984743,
+      "composite": 0.017703106831008848
+    },
+    "morph_close_gaps": {
+      "iou_vs_reference": 0.011652626346149714,
+      "iou_vs_consensus": 0.012600064086271597,
+      "composite": 0.012126345216210655
+    },
+    "morph_tophat": {
+      "iou_vs_reference": 0.0026260084849906015,
+      "iou_vs_consensus": 0.09629679298057396,
+      "composite": 0.04946140073278228
+    },
+    "morph_width_probe": {
+      "iou_vs_reference": 0.0005374560203024807,
+      "iou_vs_consensus": 0.008882835319687152,
+      "composite": 0.004710145669994816
+    },
+    "tex_lbp": {
+      "iou_vs_reference": 0.24154916945904265,
+      "iou_vs_consensus": 0.0011687042428016163,
+      "composite": 0.12135893685092213
+    },
+    "tex_gabor": {
+      "iou_vs_reference": 0.0027129061198889926,
+      "iou_vs_consensus": 0.09028930650552272,
+      "composite": 0.046501106312705855
+    },
+    "tex_glcm": {
+      "iou_vs_reference": 0.0,
+      "iou_vs_consensus": 0.0,
+      "composite": 0.0
+    },
+    "tex_laws": {
+      "iou_vs_reference": 0.9858507412967467,
+      "iou_vs_consensus": 0.0032122115664207328,
+      "composite": 0.4945314764315837
+    },
+    "stat_variance": {
+      "iou_vs_reference": 0.0025570842095503556,
+      "iou_vs_consensus": 0.32796407969314717,
+      "composite": 0.16526058195134877
+    },
+    "stat_entropy": {
+      "iou_vs_reference": 0.12371399404820804,
+      "iou_vs_consensus": 0.014376718266600749,
+      "composite": 0.0690453561574044
+    },
+    "stat_mahalanobis": {
+      "iou_vs_reference": 0.003818381181615644,
+      "iou_vs_consensus": 0.06276478354253286,
+      "composite": 0.03329158236207425
+    },
+    "stat_mean_diff": {
+      "iou_vs_reference": 0.001823669477825294,
+      "iou_vs_consensus": 0.13719738865633943,
+      "composite": 0.06951052906708237
+    },
+    "grad_structure": {
+      "iou_vs_reference": 0.0008062322173190973,
+      "iou_vs_consensus": 0.03902532314857522,
+      "composite": 0.01991577768294716
+    },
+    "grad_harris": {
+      "iou_vs_reference": 8.862537250097792e-06,
+      "iou_vs_consensus": 0.001996007984031936,
+      "composite": 0.0010024352606410169
+    },
+    "grad_hog": {
+      "iou_vs_reference": 0.005970896783467101,
+      "iou_vs_consensus": 0.372573670876431,
+      "composite": 0.18927228382994907
+    },
+    "struct_contour": {
+      "iou_vs_reference": 0.0,
+      "iou_vs_consensus": 0.0,
+      "composite": 0.0
+    },
+    "struct_ccl": {
+      "iou_vs_reference": 0.009087596235709913,
+      "iou_vs_consensus": 0.25383345572774463,
+      "composite": 0.13146052598172728
+    },
+    "struct_distance": {
+      "iou_vs_reference": 0.0013552672423180125,
+      "iou_vs_consensus": 0.006858293595759637,
+      "composite": 0.0041067804190388245
+    },
+    "struct_watershed": {
+      "iou_vs_reference": 0.0097995067526866,
+      "iou_vs_consensus": 0.285072011706716,
+      "composite": 0.14743575922970129
+    },
+    "adapt_sauvola": {
+      "iou_vs_reference": 0.0007563467315780669,
+      "iou_vs_consensus": 0.02823796358654576,
+      "composite": 0.014497155159061914
+    },
+    "adapt_niblack": {
+      "iou_vs_reference": 0.19682419980429647,
+      "iou_vs_consensus": 0.004338557195235361,
+      "composite": 0.10058137849976591
+    },
+    "freq_fft_highpass": {
+      "iou_vs_reference": 0.00031066371705519417,
+      "iou_vs_consensus": 0.041502713500114315,
+      "composite": 0.020906688608584755
+    },
+    "freq_wavelet": {
+      "iou_vs_reference": 0.0035216824710343464,
+      "iou_vs_consensus": 0.31289342502637996,
+      "composite": 0.15820755374870715
+    },
+    "quant_median": {
+      "iou_vs_reference": 0.04639647167019689,
+      "iou_vs_consensus": 0.03480823450200936,
+      "composite": 0.040602353086103125
+    },
+    "quant_kmeans": {
+      "iou_vs_reference": 9.044669383666746e-05,
+      "iou_vs_consensus": 0.00718019777035964,
+      "composite": 0.0036353222320981535
+    },
+    "quant_slic": {
+      "iou_vs_reference": 0.013795254934397073,
+      "iou_vs_consensus": 0.07085317415960594,
+      "composite": 0.04232421454700151
+    }
+  },
+  "consensus_threshold": 10,
+  "history": [
+    {
+      "date": "2026-03-30T19:52:24.407660",
+      "techniques_scored": 40
+    },
+    {
+      "date": "2026-03-30T19:53:25.274623",
+      "techniques_scored": 40
+    }
+  ]
+}
