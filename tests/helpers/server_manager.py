@@ -208,8 +208,8 @@ def start_serve(comfyui_port=None):
     _serve_process = subprocess.Popen(
         [VENV_PYTHON, str(SERVE_PY)],
         cwd=str(ROOT),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         env=env,
     )
 
