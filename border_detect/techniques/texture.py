@@ -30,7 +30,7 @@ def tex_glcm(preprocessed):
     h, w = gray.shape
     quantized = (gray // 32).astype(np.uint8)
     result = np.zeros((h, w), dtype=np.float32)
-    win = 16; step = 4
+    win = 16; step = 16  # larger step for speed (was 4)
     for y in range(0, h - win, step):
         for x in range(0, w - win, step):
             patch = quantized[y:y+win, x:x+win]
