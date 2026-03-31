@@ -39,3 +39,23 @@ def test_detect_borders_returns_confidence_map():
     assert result["border_map"].dtype == np.uint8
     assert "techniques_run" in result
     assert result["techniques_run"] >= 40
+
+
+def test_api_endpoint_handler():
+    """The border_detect endpoint handler should accept params and return border_map."""
+    from api.endpoints.border_detect import _handle_border_detect
+    import base64
+    from PIL import Image
+    import io
+
+    img = Image.new("RGB", (20, 20), color=(128, 128, 128))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    img_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    handler = _handle_border_detect()
+    status, response = handler({"image": img_b64, "width": 20, "height": 20, "mode": "general"})
+    assert status == 200
+    assert "border_map" in response
+    assert "techniques_run" in response
+    assert response["techniques_run"] >= 40

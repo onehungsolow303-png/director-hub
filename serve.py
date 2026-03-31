@@ -232,6 +232,7 @@ if __name__ == "__main__":
     from api.endpoints import enhance as ep_enhance
     from api.endpoints import split as ep_split
     from api.endpoints import workflow as ep_workflow
+    from api.endpoints import border_detect as ep_border_detect
 
     job_manager = JobManager()
     api_pool = PlaywrightPool(f"http://127.0.0.1:{PORT}", size=2)
@@ -245,6 +246,7 @@ if __name__ == "__main__":
     ep_enhance.register(api_router)
     ep_split.register(api_router)
     ep_workflow.register(api_router)
+    ep_border_detect.register(api_router)
 
     # ThreadingHTTPServer handles each request in its own thread.
     # The Playwright pool runs its own dedicated thread internally —
