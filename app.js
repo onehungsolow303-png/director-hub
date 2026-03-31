@@ -2384,18 +2384,62 @@ async function aiRemoveWorkflow() {
     const sourceData = sourceCanvas.getContext("2d").getImageData(0, 0, loadedImage.width, loadedImage.height);
     const currentTone = bgTone ? bgTone.value : "dark";
 
-    // Step 1: Generate mask — try black border detection first (exploits thin dark
-    // outlines common to game UIs), fall back to structural contour detection
+    // Step 1: Try multi-spectrum border detection via server (40-technique ensemble)
     console.log(`[AI Remove v6] Starting detection on ${loadedImage.width}x${loadedImage.height} image`);
-    let hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height);
-    let borderCoverage = getAlphaCoverage(hybridAlpha);
+    let multiSpectrumMap = null;
+    try {
+      const canvasTmp = document.createElement('canvas');
+      canvasTmp.width = loadedImage.width;
+      canvasTmp.height = loadedImage.height;
+      const ctxTmp = canvasTmp.getContext('2d');
+      ctxTmp.drawImage(loadedImage, 0, 0);
+      const b64 = canvasTmp.toDataURL('image/png').split(',')[1];
+      const resp = await fetch('/api/border-detect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({image: b64, width: loadedImage.width, height: loadedImage.height, mode: 'general'})
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        console.log(`[AI Remove v6] Multi-spectrum: ${result.techniques_run} techniques, ${result.processing_ms}ms, consensus=${result.consensus_count}`);
+        // Decode border map from base64 PNG to pixel data
+        const mapImg = new Image();
+        await new Promise((resolve, reject) => {
+          mapImg.onload = resolve;
+          mapImg.onerror = reject;
+          mapImg.src = 'data:image/png;base64,' + result.border_map;
+        });
+        const mapCanvas = document.createElement('canvas');
+        mapCanvas.width = loadedImage.width;
+        mapCanvas.height = loadedImage.height;
+        const mapCtx = mapCanvas.getContext('2d');
+        mapCtx.drawImage(mapImg, 0, 0);
+        const mapData = mapCtx.getImageData(0, 0, loadedImage.width, loadedImage.height);
+        multiSpectrumMap = new Uint8Array(loadedImage.width * loadedImage.height);
+        for (let i = 0; i < multiSpectrumMap.length; i++) {
+          multiSpectrumMap[i] = mapData.data[i * 4]; // R channel of grayscale
+        }
+      }
+    } catch (e) {
+      console.log('[AI Remove v6] Multi-spectrum unavailable, using v5+ fallback:', e.message || e);
+    }
+
+    // Step 2: Use multi-spectrum result or fall back to v5+ detection
+    let hybridAlpha;
     let usedStructural = false;
-    if (borderCoverage < 0.02 || borderCoverage > 0.85) {
-      console.log(`[AI Remove v6] Black border coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
-      hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
-      usedStructural = true;
+    if (multiSpectrumMap) {
+      hybridAlpha = multiSpectrumMap;
+      console.log('[AI Remove v6] Using multi-spectrum border map');
     } else {
-      console.log(`[AI Remove v6] Black border detection: ${(borderCoverage*100).toFixed(1)}% coverage — using border mask`);
+      hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height);
+      let borderCoverage = getAlphaCoverage(hybridAlpha);
+      if (borderCoverage < 0.02 || borderCoverage > 0.85) {
+        console.log(`[AI Remove v6] Black border coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
+        hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
+        usedStructural = true;
+      } else {
+        console.log(`[AI Remove v6] Black border detection: ${(borderCoverage*100).toFixed(1)}% coverage — using border mask`);
+      }
     }
 
     // Store as imported AI mask so the rest of the pipeline works
