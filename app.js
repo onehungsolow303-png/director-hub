@@ -1763,17 +1763,22 @@ function buildBlackBorderUiMask(sourceData, width, height, externalBorderMap) {
   }
   if (structBorderCount > 0) console.log(`[v5+] Structural horizontal borders: +${structBorderCount} pixels`);
 
-  // ── External border map override (multi-spectrum detector) ──
-  // If an external border map was provided, use it instead of the
-  // gradient+achromatic detection from Passes 1-2b above.
+  // ── External border map merge (multi-spectrum detector) ──
+  // Merge the external border map with the v5+ detection: any pixel that
+  // EITHER v5+ or multi-spectrum identifies as a border stays a border.
+  // This combines the v5+ closed-contour borders with the multi-spectrum's
+  // broader detection, giving better segmentation than either alone.
   if (externalBorderMap) {
-    const threshold = 128; // confidence > 50% = border
-    let overrideCount = 0;
+    const threshold = 128;
+    let addedCount = 0;
     for (let i = 0; i < total; i += 1) {
-      isBorder[i] = externalBorderMap[i] >= threshold ? 1 : 0;
-      if (isBorder[i]) overrideCount += 1;
+      if (!isBorder[i] && externalBorderMap[i] >= threshold) {
+        isBorder[i] = 1;
+        addedCount += 1;
+      }
     }
-    console.log(`[v5+] External border map applied: ${overrideCount} border pixels (${(overrideCount / total * 100).toFixed(1)}%)`);
+    const totalBorder = isBorder.reduce((s, v) => s + v, 0);
+    console.log(`[v5+] Multi-spectrum merged: +${addedCount} new border pixels, total ${totalBorder} (${(totalBorder / total * 100).toFixed(1)}%)`);
   }
 
   // ══════════════════════════════════════════════════════════════════════
