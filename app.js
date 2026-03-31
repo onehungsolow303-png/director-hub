@@ -2402,54 +2402,9 @@ async function aiRemoveWorkflow() {
     const sourceData = sourceCanvas.getContext("2d").getImageData(0, 0, loadedImage.width, loadedImage.height);
     const currentTone = bgTone ? bgTone.value : "dark";
 
-    // Step 1: Try multi-spectrum border detection via server (40-technique ensemble)
+    // Step 1: Run JS v5+ pipeline (proven detection that works)
     console.log(`[AI Remove v6] Starting detection on ${loadedImage.width}x${loadedImage.height} image`);
-    let multiSpectrumMap = null;
-    try {
-      const canvasTmp = document.createElement('canvas');
-      canvasTmp.width = loadedImage.width;
-      canvasTmp.height = loadedImage.height;
-      const ctxTmp = canvasTmp.getContext('2d');
-      ctxTmp.drawImage(loadedImage, 0, 0);
-      const b64 = canvasTmp.toDataURL('image/png').split(',')[1];
-      const resp = await fetch('/api/border-detect', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({image: b64, width: loadedImage.width, height: loadedImage.height, mode: 'general'})
-      });
-      if (resp.ok) {
-        const result = await resp.json();
-        console.log(`[AI Remove v6] Multi-spectrum: ${result.techniques_run} techniques, ${result.processing_ms}ms, consensus=${result.consensus_count}`);
-        // Decode border map from base64 PNG to pixel data
-        const mapImg = new Image();
-        await new Promise((resolve, reject) => {
-          mapImg.onload = resolve;
-          mapImg.onerror = reject;
-          mapImg.src = 'data:image/png;base64,' + result.border_map;
-        });
-        const mapCanvas = document.createElement('canvas');
-        mapCanvas.width = loadedImage.width;
-        mapCanvas.height = loadedImage.height;
-        const mapCtx = mapCanvas.getContext('2d');
-        mapCtx.drawImage(mapImg, 0, 0);
-        const mapData = mapCtx.getImageData(0, 0, loadedImage.width, loadedImage.height);
-        multiSpectrumMap = new Uint8Array(loadedImage.width * loadedImage.height);
-        for (let i = 0; i < multiSpectrumMap.length; i++) {
-          multiSpectrumMap[i] = mapData.data[i * 4]; // R channel of grayscale
-        }
-      }
-    } catch (e) {
-      console.log('[AI Remove v6] Multi-spectrum unavailable, using v5+ fallback:', e.message || e);
-    }
-
-    // Step 2: Run v5+ pipeline — feed multi-spectrum border map if available
-    // The multi-spectrum map replaces Passes 1-2b (border detection) inside
-    // buildBlackBorderUiMask. Passes 3-8 (segmentation, classification, invert)
-    // still run in JS using the border map as input.
-    if (multiSpectrumMap) {
-      console.log('[AI Remove v6] Feeding multi-spectrum border map into v5+ pipeline');
-    }
-    let hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height, multiSpectrumMap);
+    let hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height);
     let borderCoverage = getAlphaCoverage(hybridAlpha);
     let usedStructural = false;
     if (borderCoverage < 0.02 || borderCoverage > 0.85) {
@@ -2457,7 +2412,67 @@ async function aiRemoveWorkflow() {
       hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
       usedStructural = true;
     } else {
-      console.log(`[AI Remove v6] Detection: ${(borderCoverage*100).toFixed(1)}% coverage — using border mask`);
+      console.log(`[AI Remove v6] v5+ detection: ${(borderCoverage*100).toFixed(1)}% coverage`);
+    }
+
+    // Step 2: Send to Python for multi-spectrum cleanup (removes artifacts + border color spill)
+    try {
+      const canvasTmp = document.createElement('canvas');
+      canvasTmp.width = loadedImage.width;
+      canvasTmp.height = loadedImage.height;
+      canvasTmp.getContext('2d').drawImage(loadedImage, 0, 0);
+      const imgB64 = canvasTmp.toDataURL('image/png').split(',')[1];
+      // Encode the v5+ mask as a grayscale PNG
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = loadedImage.width;
+      maskCanvas.height = loadedImage.height;
+      const maskCtx = maskCanvas.getContext('2d');
+      const maskImgData = maskCtx.createImageData(loadedImage.width, loadedImage.height);
+      for (let i = 0; i < hybridAlpha.length; i++) {
+        const v = hybridAlpha[i];
+        maskImgData.data[i * 4] = v;
+        maskImgData.data[i * 4 + 1] = v;
+        maskImgData.data[i * 4 + 2] = v;
+        maskImgData.data[i * 4 + 3] = 255;
+      }
+      maskCtx.putImageData(maskImgData, 0, 0);
+      const maskB64 = maskCanvas.toDataURL('image/png').split(',')[1];
+      const resp = await fetch('/api/border-detect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({image: imgB64, v5_mask: maskB64, mode: 'general'})
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        console.log(`[AI Remove v6] Multi-spectrum: ${result.techniques_run} techniques, ${result.processing_ms}ms, pipeline=${result.pipeline}`);
+        if (result.cleaned_mask) {
+          // Decode cleaned mask
+          const cleanImg = new Image();
+          await new Promise((resolve, reject) => {
+            cleanImg.onload = resolve;
+            cleanImg.onerror = reject;
+            cleanImg.src = 'data:image/png;base64,' + result.cleaned_mask;
+          });
+          const cleanCanvas = document.createElement('canvas');
+          cleanCanvas.width = loadedImage.width;
+          cleanCanvas.height = loadedImage.height;
+          const cleanCtx = cleanCanvas.getContext('2d');
+          cleanCtx.drawImage(cleanImg, 0, 0);
+          const cleanData = cleanCtx.getImageData(0, 0, loadedImage.width, loadedImage.height);
+          const cleanedAlpha = new Uint8Array(loadedImage.width * loadedImage.height);
+          for (let i = 0; i < cleanedAlpha.length; i++) {
+            cleanedAlpha[i] = cleanData.data[i * 4];
+          }
+          const cleanCoverage = cleanedAlpha.reduce((s, v) => s + (v > 0 ? 1 : 0), 0) / cleanedAlpha.length;
+          console.log(`[AI Remove v6] Cleaned mask coverage: ${(cleanCoverage*100).toFixed(1)}%`);
+          if (cleanCoverage >= 0.02 && cleanCoverage <= 0.85) {
+            hybridAlpha = cleanedAlpha;
+            console.log('[AI Remove v6] Using multi-spectrum cleaned mask');
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[AI Remove v6] Multi-spectrum cleanup unavailable:', e.message || e);
     }
 
     // Store as imported AI mask so the rest of the pipeline works
