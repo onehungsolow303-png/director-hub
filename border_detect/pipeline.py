@@ -431,115 +431,131 @@ def _remove_debris(alpha, h, w):
 
 
 def _multi_spectrum_cleanup(alpha, ms_map, rgb, gray, h, w):
-    """Multi-strategy cleanup of v5+ mask using multi-spectrum analysis.
+    """Region-level cleanup — classify whole regions as UI or scene, not pixels.
 
-    Strategies:
-    1. Dark scene detection — dark, low-saturation pixels far from UI borders
-    2. Color outlier detection — pixels whose color doesn't match nearby UI
-    3. Texture mismatch — regions with scene-like texture (high edge density)
-    4. Border proximity — opaque pixels far from any multi-spectrum border
+    1. Find connected opaque regions in the v5+ mask
+    2. Score each region: is it UI or scene?
+    3. Protect entire UI regions (never touch their pixels)
+    4. Remove entire scene regions
+    5. Clean border-adjacent pixels only at UI/removed boundaries
+
+    Multi-spectrum signals used for region scoring:
+    - Border contact: does this region touch multi-spectrum-detected borders?
+    - Brightness profile: is it uniformly very dark (scene between bars)?
+    - Color consistency: does it match expected UI colors or scene colors?
+    - Edge density: smooth (UI fill) or textured (scene content)?
+    - Position: is it in the center gap between top/bottom bars?
     """
     total = h * w
-    opaque_mask = alpha > 128
+    opaque_mask = (alpha > 128).astype(np.uint8)
 
     if opaque_mask.sum() == 0:
         return alpha
 
-    # Precompute shared data
-    ms_borders = (ms_map > 0.3).astype(np.uint8)
-    ms_dilated = cv2.dilate(ms_borders, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
-    gray_f = gray.astype(np.float64)
+    # ── Split the mask into regions using multi-spectrum borders ──
+    # The v5+ mask is often one big connected blob (UI + scene connected by borders).
+    # Use multi-spectrum border detection to split it into separate regions.
+    # Pixels on MS borders become region boundaries.
+    ms_split_borders = (ms_map > 0.25).astype(np.uint8)
+    # Also add strong gradient edges as boundaries
+    gx_split = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    gy_split = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    grad_mag = np.sqrt(gx_split**2 + gy_split**2)
+    strong_edges = (grad_mag > np.percentile(grad_mag, 90)).astype(np.uint8)
+    split_mask = opaque_mask.copy()
+    split_mask[ms_split_borders > 0] = 0  # cut along MS borders
+    split_mask[strong_edges > 0] = 0      # cut along strong edges
 
-    # ── Strategy 1: Dark scene pixels ──
-    # Game scenes between UI bars are typically very dark (cave, dungeon).
-    # UI panels have visible content (text, icons) or lighter fills.
-    # Dark pixels (<40 brightness) that are NOT part of a border are likely scene.
-    near_border = cv2.dilate(ms_borders, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
-    dark_scene = opaque_mask & (gray < 40) & (near_border == 0)
-
-    # But protect dark UI fills (e.g., dark panel interiors) — they're enclosed by borders
-    # Use distance to nearest transparent pixel: deep interior dark = UI, edge dark = scene
-    opaque_u8 = opaque_mask.astype(np.uint8)
-    dist_from_edge = cv2.distanceTransform(opaque_u8, cv2.DIST_L2, 5)
-    # Dark pixels near the edge of the mask (within 15px of transparent) are scene leakage
-    dark_scene_edge = dark_scene & (dist_from_edge < 15)
-
-    # ── Strategy 2: Color outlier detection ──
-    # For each opaque pixel, compare its color to the median color of nearby opaque pixels.
-    # Pixels that don't match their neighborhood are artifacts.
-    if rgb.dtype != np.float64:
-        rgb_f = rgb.astype(np.float64)
-    else:
-        rgb_f = rgb
-    local_r = cv2.blur(rgb_f[:,:,0] * opaque_mask, (25, 25))
-    local_g = cv2.blur(rgb_f[:,:,1] * opaque_mask, (25, 25))
-    local_b = cv2.blur(rgb_f[:,:,2] * opaque_mask, (25, 25))
-    local_count = cv2.blur(opaque_mask.astype(np.float64), (25, 25))
-    local_count = np.maximum(local_count, 1)
-    local_r /= local_count; local_g /= local_count; local_b /= local_count
-    color_diff = np.sqrt(
-        (rgb_f[:,:,0] - local_r)**2 +
-        (rgb_f[:,:,1] - local_g)**2 +
-        (rgb_f[:,:,2] - local_b)**2
+    num_regions, region_labels, stats, centroids = cv2.connectedComponentsWithStats(
+        split_mask, connectivity=4
     )
-    # Pixels very different from their local neighborhood color
-    color_outlier = opaque_mask & (color_diff > 40) & (ms_dilated == 0)
 
-    # ── Strategy 3: Texture mismatch (high local edge density = scene) ──
-    edges = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)**2 + cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)**2
-    edge_mag = np.sqrt(edges)
-    local_edge = cv2.blur(edge_mag, (21, 21))
-    # UI panels are smooth (low edge density), scenes are textured (high edge density)
-    opaque_edge_median = np.median(local_edge[opaque_mask]) if opaque_mask.sum() > 0 else 10
-    high_texture = opaque_mask & (local_edge > opaque_edge_median * 2.0) & (ms_dilated == 0)
+    # ── Precompute multi-spectrum border proximity ──
+    ms_borders = (ms_map > 0.3).astype(np.uint8)
+    # Narrow dilation — "touching border" means within 5px
+    ms_near = cv2.dilate(ms_borders, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
 
-    # ── Strategy 4: Variance-based (original, relaxed threshold) ──
-    local_mean = cv2.blur(gray_f, (15, 15))
-    local_sq_mean = cv2.blur(gray_f ** 2, (15, 15))
-    local_var = np.maximum(local_sq_mean - local_mean ** 2, 0)
-    median_var = np.median(local_var[opaque_mask])
-    high_variance = opaque_mask & (ms_dilated == 0) & (local_var > median_var * 1.2)
+    # ── Precompute edge density map ──
+    gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    edge_mag = np.sqrt(gx**2 + gy**2)
 
-    # ── Combine: vote across strategies ──
-    # Each strategy contributes a vote. Pixels with 2+ votes are removed.
-    votes = (dark_scene_edge.astype(np.int32) +
-             color_outlier.astype(np.int32) +
-             high_texture.astype(np.int32) +
-             high_variance.astype(np.int32))
+    # ── Score each region ──
+    scene_regions = set()
+    ui_regions = set()
 
-    suspicious = votes >= 2
-
-    # Remove suspicious regions — allow larger regions now (up to 10% of image)
-    suspicious_u8 = suspicious.astype(np.uint8)
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(suspicious_u8, connectivity=4)
-    removed = 0
-    for i in range(1, num_labels):
+    for i in range(1, num_regions):
         area = stats[i, cv2.CC_STAT_AREA]
-        if area < total * 0.10:  # remove up to 10% regions
-            alpha[labels == i] = 0
-            removed += area
+        if area < 50:  # skip tiny noise
+            continue
 
-    # ── Also remove isolated dark strips not caught by voting ──
-    # Dark pixels near the mask edge that aren't near MS borders = scene leakage.
-    # Protect deep interior dark pixels (panel fills, leather textures).
-    opaque_after = (alpha > 128).astype(np.uint8)
-    dist_interior = cv2.distanceTransform(opaque_after, cv2.DIST_L2, 5)
-    dark_remaining = (alpha > 128) & (gray < 45) & (ms_dilated == 0) & (dist_interior < 20)
-    dark_u8 = dark_remaining.astype(np.uint8)
-    n_dark, dark_labels, dark_stats, _ = cv2.connectedComponentsWithStats(dark_u8, connectivity=4)
-    dark_removed = 0
-    for i in range(1, n_dark):
-        area = dark_stats[i, cv2.CC_STAT_AREA]
-        if area > 100 and area < total * 0.10:
-            region_mask = dark_labels == i
-            region_mean_brightness = gray[region_mask].mean()
-            if region_mean_brightness < 40:
-                alpha[region_mask] = 0
-                dark_removed += area
+        region_mask = region_labels == i
+        cx = centroids[i][0] / w  # normalized center x
+        cy = centroids[i][1] / h  # normalized center y
+        region_w = stats[i, cv2.CC_STAT_WIDTH]
+        region_h = stats[i, cv2.CC_STAT_HEIGHT]
 
-    total_removed = removed + dark_removed
-    if total_removed > 0:
-        print(f"  [MS Cleanup] Removed {total_removed} pixels ({total_removed/total*100:.1f}%): "
-              f"{removed} by voting, {dark_removed} dark strips")
+        # ── Region metrics ──
+        mean_brightness = float(gray[region_mask].mean())
+        brightness_std = float(gray[region_mask].std())
+        mean_edge = float(edge_mag[region_mask].mean())
+
+        # What fraction of this region's pixels are near an MS border?
+        border_contact = float(ms_near[region_mask].sum()) / max(area, 1)
+
+        # Color: check for purple/cave hues (scene indicator)
+        region_rgb = rgb[region_mask]  # (N, 3)
+        mean_r = region_rgb[:, 0].mean()
+        mean_g = region_rgb[:, 1].mean()
+        mean_b = region_rgb[:, 2].mean()
+
+        # ── Classification signals ──
+        is_very_dark = mean_brightness < 50 and brightness_std < 20
+        is_dark_uniform = mean_brightness < 70 and brightness_std < 15
+        has_no_border_contact = border_contact < 0.05
+        is_in_center_gap = 0.20 < cy < 0.75 and 0.15 < cx < 0.85
+        is_purplish = mean_b > mean_g and mean_b > mean_r * 0.8 and mean_brightness < 80
+        is_small = area < total * 0.05
+        is_high_edge = mean_edge > 15  # textured scene content
+        has_good_border_contact = border_contact > 0.20
+        is_bright_enough = mean_brightness > 80 or brightness_std > 30
+
+        # ── Scene indicators (vote) ──
+        scene_votes = 0
+        if is_very_dark and has_no_border_contact:
+            scene_votes += 2  # strong signal: dark + no borders
+        if is_dark_uniform and is_in_center_gap:
+            scene_votes += 2  # strong: dark in the gap between bars
+        if is_purplish and has_no_border_contact:
+            scene_votes += 1
+        if is_high_edge and has_no_border_contact and is_small:
+            scene_votes += 1
+
+        # ── UI indicators (protect) ──
+        ui_votes = 0
+        if has_good_border_contact:
+            ui_votes += 2  # enclosed by detected borders = UI
+        if is_bright_enough:
+            ui_votes += 1  # has visible content
+        if area > total * 0.02:
+            ui_votes += 1  # large region = likely important
+
+        # ── Decision ──
+        if scene_votes >= 2 and scene_votes > ui_votes:
+            scene_regions.add(i)
+        else:
+            ui_regions.add(i)
+
+    # ── Remove scene regions ──
+    removed = 0
+    for i in scene_regions:
+        region_mask = region_labels == i
+        alpha[region_mask] = 0
+        removed += region_mask.sum()
+
+    if removed > 0:
+        print(f"  [MS Cleanup] Removed {len(scene_regions)} scene regions "
+              f"({removed} pixels, {removed/total*100:.1f}%), "
+              f"protected {len(ui_regions)} UI regions")
 
     return alpha
