@@ -121,6 +121,59 @@ def run_pipeline(img_bgr, multi_spectrum_map=None):
     return alpha
 
 
+def _detect_bar_layout(opaque_mask, ms_map, gray, h, w):
+    """Detect top bar and bottom bar boundaries in a game UI.
+
+    Game UIs have horizontal bars at the top and bottom with a scene gap between.
+    Find the bottom edge of the top bar and the top edge of the bottom bar.
+
+    Returns (top_bar_bottom_y, bottom_bar_top_y).
+    """
+    # Project the opaque mask horizontally — each row gets a "density" score
+    row_density = opaque_mask.astype(np.float64).mean(axis=1)
+
+    # Also project the MS border map — border-dense rows = bar boundaries
+    ms_row = (ms_map > 0.3).astype(np.float64).mean(axis=1)
+
+    # Also check brightness — bars are typically lighter than the dark gap
+    row_brightness = gray.astype(np.float64).mean(axis=1)
+
+    # The center gap has: low density (less opaque), low brightness (dark scene)
+    # Find the gap by looking for a continuous region of low brightness in the middle
+
+    # Scan from top down: find where brightness drops (top bar ends)
+    top_bar_bottom = int(h * 0.08)  # default: 8% from top
+    for y in range(int(h * 0.03), int(h * 0.35)):
+        # Look for a transition from bright (bar) to dark (gap)
+        if row_brightness[y] < 60 and row_brightness[max(0, y-5):y].mean() < 70:
+            # Check that the next chunk stays dark
+            look_ahead = row_brightness[y:min(h, y+30)]
+            if len(look_ahead) > 10 and look_ahead.mean() < 70:
+                top_bar_bottom = y
+                break
+
+    # Scan from bottom up: find where brightness drops (bottom bar ends)
+    bottom_bar_top = int(h * 0.92)  # default: 92% from top
+    for y in range(h - int(h * 0.03), int(h * 0.55), -1):
+        if row_brightness[y] < 60 and row_brightness[y:min(h, y+5)].mean() < 70:
+            look_ahead = row_brightness[max(0, y-30):y]
+            if len(look_ahead) > 10 and look_ahead.mean() < 70:
+                bottom_bar_top = y
+                break
+
+    # Validate: gap should be at least 20% of image height
+    if bottom_bar_top - top_bar_bottom < h * 0.20:
+        # Fallback to safe defaults
+        top_bar_bottom = int(h * 0.10)
+        bottom_bar_top = int(h * 0.60)
+
+    print(f"  [Layout] Top bar ends at y={top_bar_bottom} ({top_bar_bottom/h*100:.0f}%), "
+          f"Bottom bar starts at y={bottom_bar_top} ({bottom_bar_top/h*100:.0f}%), "
+          f"Gap: {(bottom_bar_top - top_bar_bottom)/h*100:.0f}%")
+
+    return top_bar_bottom, bottom_bar_top
+
+
 def _compute_rgb_gradient(rgb, h, w):
     """Max Euclidean color distance to 4-connected neighbors."""
     gradient = np.zeros((h, w), dtype=np.float64)
@@ -452,19 +505,18 @@ def _multi_spectrum_cleanup(alpha, ms_map, rgb, gray, h, w):
     if opaque_mask.sum() == 0:
         return alpha
 
-    # ── Split the mask into regions using multi-spectrum borders ──
-    # The v5+ mask is often one big connected blob (UI + scene connected by borders).
-    # Use multi-spectrum border detection to split it into separate regions.
-    # Pixels on MS borders become region boundaries.
+    # ── Detect UI layout: find top bar, bottom bar, and center gap ──
+    top_bar_bottom, bottom_bar_top = _detect_bar_layout(opaque_mask, ms_map, gray, h, w)
+
+    # ── Split the mask into regions using MS borders + gradient edges ──
     ms_split_borders = (ms_map > 0.25).astype(np.uint8)
-    # Also add strong gradient edges as boundaries
     gx_split = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
     gy_split = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
     grad_mag = np.sqrt(gx_split**2 + gy_split**2)
     strong_edges = (grad_mag > np.percentile(grad_mag, 90)).astype(np.uint8)
     split_mask = opaque_mask.copy()
-    split_mask[ms_split_borders > 0] = 0  # cut along MS borders
-    split_mask[strong_edges > 0] = 0      # cut along strong edges
+    split_mask[ms_split_borders > 0] = 0
+    split_mask[strong_edges > 0] = 0
 
     num_regions, region_labels, stats, centroids = cv2.connectedComponentsWithStats(
         split_mask, connectivity=4
@@ -509,36 +561,50 @@ def _multi_spectrum_cleanup(alpha, ms_map, rgb, gray, h, w):
         mean_g = region_rgb[:, 1].mean()
         mean_b = region_rgb[:, 2].mean()
 
+        # ── Layout-aware position check ──
+        region_top = stats[i, cv2.CC_STAT_TOP]
+        region_bottom = region_top + region_h
+        is_in_center_gap = (region_top > top_bar_bottom and
+                            region_bottom < bottom_bar_top)
+        mostly_in_gap = (centroids[i][1] > top_bar_bottom and
+                         centroids[i][1] < bottom_bar_top)
+
         # ── Classification signals ──
-        is_very_dark = mean_brightness < 50 and brightness_std < 20
-        is_dark_uniform = mean_brightness < 70 and brightness_std < 15
+        is_very_dark = mean_brightness < 55 and brightness_std < 25
+        is_dark_uniform = mean_brightness < 75 and brightness_std < 20
         has_no_border_contact = border_contact < 0.05
-        is_in_center_gap = 0.20 < cy < 0.75 and 0.15 < cx < 0.85
+        has_low_border_contact = border_contact < 0.15
         is_purplish = mean_b > mean_g and mean_b > mean_r * 0.8 and mean_brightness < 80
         is_small = area < total * 0.05
-        is_high_edge = mean_edge > 15  # textured scene content
-        has_good_border_contact = border_contact > 0.20
-        is_bright_enough = mean_brightness > 80 or brightness_std > 30
+        is_high_edge = mean_edge > 15
+        has_good_border_contact = border_contact > 0.25
+        is_bright_enough = mean_brightness > 90 or brightness_std > 35
 
         # ── Scene indicators (vote) ──
         scene_votes = 0
+        if is_in_center_gap and is_very_dark:
+            scene_votes += 3  # very strong: dark region fully inside the gap
+        if mostly_in_gap and is_dark_uniform:
+            scene_votes += 2  # strong: centered in gap + dark
         if is_very_dark and has_no_border_contact:
-            scene_votes += 2  # strong signal: dark + no borders
-        if is_dark_uniform and is_in_center_gap:
-            scene_votes += 2  # strong: dark in the gap between bars
-        if is_purplish and has_no_border_contact:
-            scene_votes += 1
+            scene_votes += 2  # dark + no borders anywhere near
+        if is_dark_uniform and has_low_border_contact:
+            scene_votes += 1  # dark + minimal border contact
+        if is_purplish and has_low_border_contact:
+            scene_votes += 1  # purple hue = cave/dungeon scene
         if is_high_edge and has_no_border_contact and is_small:
-            scene_votes += 1
+            scene_votes += 1  # textured fragment
 
         # ── UI indicators (protect) ──
         ui_votes = 0
         if has_good_border_contact:
-            ui_votes += 2  # enclosed by detected borders = UI
+            ui_votes += 3  # strong: enclosed by detected borders
         if is_bright_enough:
-            ui_votes += 1  # has visible content
-        if area > total * 0.02:
-            ui_votes += 1  # large region = likely important
+            ui_votes += 2  # has visible content/color
+        if area > total * 0.02 and not is_in_center_gap:
+            ui_votes += 1  # large region outside the gap
+        if not mostly_in_gap and not is_very_dark:
+            ui_votes += 1  # in the bar areas and not dark
 
         # ── Decision ──
         if scene_votes >= 2 and scene_votes > ui_votes:
