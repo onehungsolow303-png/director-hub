@@ -1535,7 +1535,7 @@ function buildContourTree(contours, imageWidth, imageHeight) {
   return nodes;
 }
 
-function buildBlackBorderUiMask(sourceData, width, height) {
+function buildBlackBorderUiMask(sourceData, width, height, externalBorderMap) {
   // v5: Border-bounded background subtraction with inverted selection.
   //
   // The user's key insight: detect borders → set as boundaries → select
@@ -1762,6 +1762,19 @@ function buildBlackBorderUiMask(sourceData, width, height) {
     }
   }
   if (structBorderCount > 0) console.log(`[v5+] Structural horizontal borders: +${structBorderCount} pixels`);
+
+  // ── External border map override (multi-spectrum detector) ──
+  // If an external border map was provided, use it instead of the
+  // gradient+achromatic detection from Passes 1-2b above.
+  if (externalBorderMap) {
+    const threshold = 128; // confidence > 50% = border
+    let overrideCount = 0;
+    for (let i = 0; i < total; i += 1) {
+      isBorder[i] = externalBorderMap[i] >= threshold ? 1 : 0;
+      if (isBorder[i]) overrideCount += 1;
+    }
+    console.log(`[v5+] External border map applied: ${overrideCount} border pixels (${(overrideCount / total * 100).toFixed(1)}%)`);
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // PASS 3: Component labeling (regions between borders)
@@ -2424,22 +2437,22 @@ async function aiRemoveWorkflow() {
       console.log('[AI Remove v6] Multi-spectrum unavailable, using v5+ fallback:', e.message || e);
     }
 
-    // Step 2: Use multi-spectrum result or fall back to v5+ detection
-    let hybridAlpha;
-    let usedStructural = false;
+    // Step 2: Run v5+ pipeline — feed multi-spectrum border map if available
+    // The multi-spectrum map replaces Passes 1-2b (border detection) inside
+    // buildBlackBorderUiMask. Passes 3-8 (segmentation, classification, invert)
+    // still run in JS using the border map as input.
     if (multiSpectrumMap) {
-      hybridAlpha = multiSpectrumMap;
-      console.log('[AI Remove v6] Using multi-spectrum border map');
+      console.log('[AI Remove v6] Feeding multi-spectrum border map into v5+ pipeline');
+    }
+    let hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height, multiSpectrumMap);
+    let borderCoverage = getAlphaCoverage(hybridAlpha);
+    let usedStructural = false;
+    if (borderCoverage < 0.02 || borderCoverage > 0.85) {
+      console.log(`[AI Remove v6] Coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
+      hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
+      usedStructural = true;
     } else {
-      hybridAlpha = buildBlackBorderUiMask(sourceData, loadedImage.width, loadedImage.height);
-      let borderCoverage = getAlphaCoverage(hybridAlpha);
-      if (borderCoverage < 0.02 || borderCoverage > 0.85) {
-        console.log(`[AI Remove v6] Black border coverage ${(borderCoverage*100).toFixed(1)}% — falling back to structural detection`);
-        hybridAlpha = buildStructuralUiMask(sourceData, loadedImage.width, loadedImage.height, currentTone);
-        usedStructural = true;
-      } else {
-        console.log(`[AI Remove v6] Black border detection: ${(borderCoverage*100).toFixed(1)}% coverage — using border mask`);
-      }
+      console.log(`[AI Remove v6] Detection: ${(borderCoverage*100).toFixed(1)}% coverage — using border mask`);
     }
 
     // Store as imported AI mask so the rest of the pipeline works
