@@ -1,248 +1,248 @@
 {
   "version": 1,
-  "last_updated": "2026-03-30T19:53:25.274623",
+  "last_updated": "2026-03-30T20:03:19.538062",
   "technique_weights": {
-    "edge_sobel": 0.0626861644990349,
-    "edge_scharr": 0.06114559512580933,
-    "edge_prewitt": 0.06262494939757919,
-    "edge_roberts": 0.045271154338777514,
-    "edge_log": 0.007709306260267963,
-    "edge_dog": 0.006808448515803868,
-    "edge_canny": 0.020467730326482456,
-    "edge_phase": 0.010177833580917613,
-    "color_hsv_dark": 0.004894124636177682,
-    "color_lab_delta": 0.06530514990296228,
-    "color_ycbcr_luma": 0.0626861644990349,
-    "color_rgb_gradient": 0.06225017778262889,
-    "color_achromatic": 0.004894124636177682,
-    "morph_gradient": 0.02522812116068495,
-    "morph_blackhat": 0.008294744748971702,
-    "morph_close_gaps": 0.021451785384313693,
-    "morph_tophat": 0.013118452153817203,
-    "morph_width_probe": 0.0203439207120647,
-    "tex_lbp": 0.03726536545378553,
-    "tex_gabor": 0.011322559647689448,
-    "tex_glcm": 0.004894124636177682,
-    "tex_laws": 0.07794150671527963,
-    "stat_variance": 0.03312984139939078,
-    "stat_entropy": 0.01933871739536356,
-    "stat_mahalanobis": 0.008746340853720062,
-    "stat_mean_diff": 0.016557098514667367,
-    "grad_structure": 0.011692479007218948,
-    "grad_harris": 0.004894124636177682,
-    "grad_hog": 0.03992634260656894,
-    "struct_contour": 0.004894124636177682,
-    "struct_ccl": 0.024912251987345473,
-    "struct_distance": 0.004894124636177682,
-    "struct_watershed": 0.027550674192466786,
-    "adapt_sauvola": 0.006924441740539139,
-    "adapt_niblack": 0.021561114729546093,
-    "freq_fft_highpass": 0.006895878338319343,
-    "freq_wavelet": 0.03385342481893018,
-    "quant_median": 0.012128439810534042,
-    "quant_kmeans": 0.014912207319992734,
-    "quant_slic": 0.01040686926242472
+    "edge_sobel": 0.045380031641919505,
+    "edge_scharr": 0.04287903140733676,
+    "edge_prewitt": 0.04381419326889115,
+    "edge_roberts": 0.022712063551676712,
+    "edge_log": 0.005170125054277663,
+    "edge_dog": 0.00701324745333931,
+    "edge_canny": 0.022443414284063653,
+    "edge_phase": 0.005170125054277663,
+    "color_hsv_dark": 0.005170125054277663,
+    "color_lab_delta": 0.050607993247547264,
+    "color_ycbcr_luma": 0.04537905197166982,
+    "color_rgb_gradient": 0.04834782599409904,
+    "color_achromatic": 0.005170125054277663,
+    "morph_gradient": 0.0449260904840241,
+    "morph_blackhat": 0.013010466152720512,
+    "morph_close_gaps": 0.02752362912398941,
+    "morph_tophat": 0.010511561506439282,
+    "morph_width_probe": 0.02589000270867115,
+    "tex_lbp": 0.03377918252349757,
+    "tex_gabor": 0.0670395041234225,
+    "tex_glcm": 0.013870179553747567,
+    "tex_laws": 0.09093040985089712,
+    "stat_variance": 0.03431710618980418,
+    "stat_entropy": 0.02720507137930614,
+    "stat_mahalanobis": 0.008082304598487203,
+    "stat_mean_diff": 0.011928231935553514,
+    "grad_structure": 0.017811072327151227,
+    "grad_harris": 0.005170125054277663,
+    "grad_hog": 0.031529419359767316,
+    "struct_contour": 0.005170125054277663,
+    "struct_ccl": 0.03943645523892458,
+    "struct_distance": 0.005170125054277663,
+    "struct_watershed": 0.033740062161250375,
+    "adapt_sauvola": 0.01187946386001396,
+    "adapt_niblack": 0.024529173623678197,
+    "freq_fft_highpass": 0.006228541296606801,
+    "freq_wavelet": 0.009960849984816833,
+    "quant_median": 0.01680161138961164,
+    "quant_kmeans": 0.018960596738127968,
+    "quant_slic": 0.015341285689003966
   },
   "technique_scores": {
     "edge_sobel": {
-      "iou_vs_reference": 0.0025730328434776088,
-      "iou_vs_consensus": 0.6594640168623909,
-      "composite": 0.33101852485293426
+      "iou_vs_reference": 0.0037081158739565093,
+      "iou_vs_consensus": 0.390820317696831,
+      "composite": 0.19726421678539377
     },
     "edge_scharr": {
-      "iou_vs_reference": 0.002567052625309156,
-      "iou_vs_consensus": 0.6499922268329725,
-      "composite": 0.32627963972914087
+      "iou_vs_reference": 0.0035893720708171655,
+      "iou_vs_consensus": 0.3796342118846549,
+      "composite": 0.19161179197773603
     },
     "edge_prewitt": {
-      "iou_vs_reference": 0.0025286135792806424,
-      "iou_vs_consensus": 0.6494119926847287,
-      "composite": 0.3259703031320047
+      "iou_vs_reference": 0.003606327137392642,
+      "iou_vs_consensus": 0.37371522251733885,
+      "composite": 0.18866077482736573
     },
     "edge_roberts": {
-      "iou_vs_reference": 0.002096261408677598,
-      "iou_vs_consensus": 0.4532730956428588,
-      "composite": 0.22768467852576818
+      "iou_vs_reference": 0.0019757562691860085,
+      "iou_vs_consensus": 0.17838290609096943,
+      "composite": 0.09017933118007772
     },
     "edge_log": {
-      "iou_vs_reference": 0.00034538960972437617,
-      "iou_vs_consensus": 0.04009889701028577,
-      "composite": 0.02022214331000507
+      "iou_vs_reference": 0.00016798202445984144,
+      "iou_vs_consensus": 0.011171128897230946,
+      "composite": 0.005669555460845394
     },
     "edge_dog": {
-      "iou_vs_reference": 0.0007008457712454038,
-      "iou_vs_consensus": 0.029926677946982515,
-      "composite": 0.01531376185911396
+      "iou_vs_reference": 0.0028348648096950223,
+      "iou_vs_consensus": 0.06192001545284067,
+      "composite": 0.032377440131267844
     },
     "edge_canny": {
-      "iou_vs_reference": 0.0021219077524272933,
-      "iou_vs_consensus": 0.21557098100268265,
-      "composite": 0.10884644437755497
+      "iou_vs_reference": 0.004032428895750294,
+      "iou_vs_consensus": 0.18702046417991455,
+      "composite": 0.09552644653783242
     },
     "edge_phase": {
-      "iou_vs_reference": 0.0005627858697330393,
-      "iou_vs_consensus": 0.05938968799452042,
-      "composite": 0.02997623693212673
+      "iou_vs_reference": 0.00039946379323760567,
+      "iou_vs_consensus": 0.025524797724500503,
+      "composite": 0.012962130758869055
     },
     "color_hsv_dark": {
       "iou_vs_reference": 0.0,
-      "iou_vs_consensus": 0.0014686216448562422,
-      "composite": 0.0007343108224281211
+      "iou_vs_consensus": 0.004887325889015204,
+      "composite": 0.002443662944507602
     },
     "color_lab_delta": {
-      "iou_vs_reference": 0.0027493281343561014,
-      "iou_vs_consensus": 0.6370634091107047,
-      "composite": 0.3199063686225304
+      "iou_vs_reference": 0.0045779436530118825,
+      "iou_vs_consensus": 0.4293711568906733,
+      "composite": 0.2169745502718426
     },
     "color_ycbcr_luma": {
-      "iou_vs_reference": 0.0025730328434776088,
-      "iou_vs_consensus": 0.6594640168623909,
-      "composite": 0.33101852485293426
+      "iou_vs_reference": 0.0037081161747686826,
+      "iou_vs_consensus": 0.39081499614187265,
+      "composite": 0.19726155615832067
     },
     "color_rgb_gradient": {
-      "iou_vs_reference": 0.0026941451400699025,
-      "iou_vs_consensus": 0.6067916748705713,
-      "composite": 0.3047429100053206
+      "iou_vs_reference": 0.004466953567178249,
+      "iou_vs_consensus": 0.4217824110762875,
+      "composite": 0.21312468232173287
     },
     "color_achromatic": {
       "iou_vs_reference": 0.0,
-      "iou_vs_consensus": 0.0019133967207323893,
-      "composite": 0.0009566983603661946
+      "iou_vs_consensus": 0.010746295500644478,
+      "composite": 0.005373147750322239
     },
     "morph_gradient": {
-      "iou_vs_reference": 0.0008823048986328622,
-      "iou_vs_consensus": 0.20976969519914304,
-      "composite": 0.10532600004888795
+      "iou_vs_reference": 0.004477629361032028,
+      "iou_vs_consensus": 0.4355250395630201,
+      "composite": 0.22000133446202605
     },
     "morph_blackhat": {
-      "iou_vs_reference": 2.3569322170263185e-05,
-      "iou_vs_consensus": 0.03538264433984743,
-      "composite": 0.017703106831008848
+      "iou_vs_reference": 6.12345940377199e-05,
+      "iou_vs_consensus": 0.0716508160858271,
+      "composite": 0.03585602533993241
     },
     "morph_close_gaps": {
-      "iou_vs_reference": 0.011652626346149714,
-      "iou_vs_consensus": 0.012600064086271597,
-      "composite": 0.012126345216210655
+      "iou_vs_reference": 0.014764046096110057,
+      "iou_vs_consensus": 0.029294790398780756,
+      "composite": 0.022029418247445406
     },
     "morph_tophat": {
-      "iou_vs_reference": 0.0026260084849906015,
-      "iou_vs_consensus": 0.09629679298057396,
-      "composite": 0.04946140073278228
+      "iou_vs_reference": 0.002840726379703271,
+      "iou_vs_consensus": 0.07469490846046486,
+      "composite": 0.03876781742008407
     },
     "morph_width_probe": {
-      "iou_vs_reference": 0.0005374560203024807,
-      "iou_vs_consensus": 0.008882835319687152,
-      "composite": 0.004710145669994816
+      "iou_vs_reference": 0.005151962798899829,
+      "iou_vs_consensus": 0.02307338986713362,
+      "composite": 0.014112676333016725
     },
     "tex_lbp": {
-      "iou_vs_reference": 0.24154916945904265,
-      "iou_vs_consensus": 0.0011687042428016163,
-      "composite": 0.12135893685092213
+      "iou_vs_reference": 0.17691136785859993,
+      "iou_vs_consensus": 0.013669488842152954,
+      "composite": 0.09529042835037645
     },
     "tex_gabor": {
-      "iou_vs_reference": 0.0027129061198889926,
-      "iou_vs_consensus": 0.09028930650552272,
-      "composite": 0.046501106312705855
+      "iou_vs_reference": 0.8163131216061095,
+      "iou_vs_consensus": 0.002721340719584296,
+      "composite": 0.4095172311628469
     },
     "tex_glcm": {
-      "iou_vs_reference": 0.0,
-      "iou_vs_consensus": 0.0,
-      "composite": 0.0
+      "iou_vs_reference": 0.0018663114092562947,
+      "iou_vs_consensus": 0.12532839044894623,
+      "composite": 0.06359735092910127
     },
     "tex_laws": {
-      "iou_vs_reference": 0.9858507412967467,
-      "iou_vs_consensus": 0.0032122115664207328,
-      "composite": 0.4945314764315837
+      "iou_vs_reference": 0.9777797452209475,
+      "iou_vs_consensus": 0.007022085539292017,
+      "composite": 0.49240091538011976
     },
     "stat_variance": {
-      "iou_vs_reference": 0.0025570842095503556,
-      "iou_vs_consensus": 0.32796407969314717,
-      "composite": 0.16526058195134877
+      "iou_vs_reference": 0.007414949010620268,
+      "iou_vs_consensus": 0.3100780173736768,
+      "composite": 0.15874648319214854
     },
     "stat_entropy": {
-      "iou_vs_reference": 0.12371399404820804,
-      "iou_vs_consensus": 0.014376718266600749,
-      "composite": 0.0690453561574044
+      "iou_vs_reference": 0.1250832801112001,
+      "iou_vs_consensus": 0.03012694686507851,
+      "composite": 0.07760511348813931
     },
     "stat_mahalanobis": {
-      "iou_vs_reference": 0.003818381181615644,
-      "iou_vs_consensus": 0.06276478354253286,
-      "composite": 0.03329158236207425
+      "iou_vs_reference": 0.0030437306306779865,
+      "iou_vs_consensus": 0.07549620813527341,
+      "composite": 0.0392699693829757
     },
     "stat_mean_diff": {
-      "iou_vs_reference": 0.001823669477825294,
-      "iou_vs_consensus": 0.13719738865633943,
-      "composite": 0.06951052906708237
+      "iou_vs_reference": 0.0015279166698505039,
+      "iou_vs_consensus": 0.08204380015210541,
+      "composite": 0.041785858410977955
     },
     "grad_structure": {
-      "iou_vs_reference": 0.0008062322173190973,
-      "iou_vs_consensus": 0.03902532314857522,
-      "composite": 0.01991577768294716
+      "iou_vs_reference": 0.0026514471412612977,
+      "iou_vs_consensus": 0.14671937862373932,
+      "composite": 0.07468541288250032
     },
     "grad_harris": {
-      "iou_vs_reference": 8.862537250097792e-06,
-      "iou_vs_consensus": 0.001996007984031936,
-      "composite": 0.0010024352606410169
+      "iou_vs_reference": 5.68324841795926e-05,
+      "iou_vs_consensus": 0.005404541093700032,
+      "composite": 0.0027306867889398123
     },
     "grad_hog": {
-      "iou_vs_reference": 0.005970896783467101,
-      "iou_vs_consensus": 0.372573670876431,
-      "composite": 0.18927228382994907
+      "iou_vs_reference": 0.008602727949280119,
+      "iou_vs_consensus": 0.23114926747500814,
+      "composite": 0.11987599771214413
     },
     "struct_contour": {
-      "iou_vs_reference": 0.0,
-      "iou_vs_consensus": 0.0,
-      "composite": 0.0
+      "iou_vs_reference": 0.0002323704159681964,
+      "iou_vs_consensus": 0.025130954465227864,
+      "composite": 0.01268166244059803
     },
     "struct_ccl": {
-      "iou_vs_reference": 0.009087596235709913,
-      "iou_vs_consensus": 0.25383345572774463,
-      "composite": 0.13146052598172728
+      "iou_vs_reference": 0.010224819145721275,
+      "iou_vs_consensus": 0.37882059032168525,
+      "composite": 0.19452270473370326
     },
     "struct_distance": {
-      "iou_vs_reference": 0.0013552672423180125,
-      "iou_vs_consensus": 0.006858293595759637,
-      "composite": 0.0041067804190388245
+      "iou_vs_reference": 0.0011643196152046826,
+      "iou_vs_consensus": 0.02164054618281342,
+      "composite": 0.011402432899009052
     },
     "struct_watershed": {
-      "iou_vs_reference": 0.0097995067526866,
-      "iou_vs_consensus": 0.285072011706716,
-      "composite": 0.14743575922970129
+      "iou_vs_reference": 0.011874394127736953,
+      "iou_vs_consensus": 0.2921092386937744,
+      "composite": 0.15199181641075568
     },
     "adapt_sauvola": {
-      "iou_vs_reference": 0.0007563467315780669,
-      "iou_vs_consensus": 0.02823796358654576,
-      "composite": 0.014497155159061914
+      "iou_vs_reference": 0.0013106407228188947,
+      "iou_vs_consensus": 0.06690120440171779,
+      "composite": 0.03410592256226834
     },
     "adapt_niblack": {
-      "iou_vs_reference": 0.19682419980429647,
-      "iou_vs_consensus": 0.004338557195235361,
-      "composite": 0.10058137849976591
+      "iou_vs_reference": 0.1839329154808541,
+      "iou_vs_consensus": 0.018619958081781268,
+      "composite": 0.10127643678131769
     },
     "freq_fft_highpass": {
-      "iou_vs_reference": 0.00031066371705519417,
-      "iou_vs_consensus": 0.041502713500114315,
-      "composite": 0.020906688608584755
+      "iou_vs_reference": 0.0004982400207881868,
+      "iou_vs_consensus": 0.031801819525604694,
+      "composite": 0.01615002977319644
     },
     "freq_wavelet": {
-      "iou_vs_reference": 0.0035216824710343464,
-      "iou_vs_consensus": 0.31289342502637996,
-      "composite": 0.15820755374870715
+      "iou_vs_reference": 0.001292619253777122,
+      "iou_vs_consensus": 0.035292369418233153,
+      "composite": 0.018292494336005136
     },
     "quant_median": {
-      "iou_vs_reference": 0.04639647167019689,
-      "iou_vs_consensus": 0.03480823450200936,
-      "composite": 0.040602353086103125
+      "iou_vs_reference": 0.055233581931454924,
+      "iou_vs_consensus": 0.05416645757013098,
+      "composite": 0.05470001975079295
     },
     "quant_kmeans": {
-      "iou_vs_reference": 9.044669383666746e-05,
-      "iou_vs_consensus": 0.00718019777035964,
-      "composite": 0.0036353222320981535
+      "iou_vs_reference": 0.0002699318253926014,
+      "iou_vs_consensus": 0.024541810278834772,
+      "composite": 0.012405871052113687
     },
     "quant_slic": {
-      "iou_vs_reference": 0.013795254934397073,
-      "iou_vs_consensus": 0.07085317415960594,
-      "composite": 0.04232421454700151
+      "iou_vs_reference": 0.035741205226669515,
+      "iou_vs_consensus": 0.09474327960938325,
+      "composite": 0.06524224241802638
     }
   },
   "consensus_threshold": 10,
@@ -253,6 +253,14 @@
     },
     {
       "date": "2026-03-30T19:53:25.274623",
+      "techniques_scored": 40
+    },
+    {
+      "date": "2026-03-30T20:03:13.908796",
+      "techniques_scored": 40
+    },
+    {
+      "date": "2026-03-30T20:03:19.538062",
       "techniques_scored": 40
     }
   ]
