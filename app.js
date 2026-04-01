@@ -1304,6 +1304,24 @@ function buildBlackBorderUiMask(sourceData, width, height, externalBorderMap) {
 
   console.log(`[v5+] Border enhancement: +${enhancedCount} pixels (hysteresis + gap bridging)`);
 
+  // ── Border budget safety valve ──
+  // If total border pixels exceed 15% of image, the dark achromatic criterion
+  // and hysteresis are fragmenting the scene (common in dark game backgrounds).
+  // Strip back to gradient-only borders which are more reliable.
+  let borderTotal = 0;
+  for (let i = 0; i < total; i += 1) if (isBorder[i]) borderTotal += 1;
+  if (borderTotal > total * 0.15) {
+    console.log(`[v5+] Border budget exceeded: ${borderTotal} pixels (${(borderTotal/total*100).toFixed(1)}%). Stripping to gradient-only.`);
+    let stripped = 0;
+    for (let i = 0; i < total; i += 1) {
+      if (isBorder[i] && gradient[i] < gradThreshold) {
+        isBorder[i] = 0;
+        stripped += 1;
+      }
+    }
+    console.log(`[v5+] Stripped ${stripped} non-gradient border pixels`);
+  }
+
   // ── Pass 2c: Horizontal structure border detection ──
   // Detect thin horizontal lines (1-3px tall) of very dark pixels that span
   // most of the image width. These are UI bar edge boundaries that the
