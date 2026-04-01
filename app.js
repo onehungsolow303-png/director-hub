@@ -1305,21 +1305,28 @@ function buildBlackBorderUiMask(sourceData, width, height, externalBorderMap) {
   console.log(`[v5+] Border enhancement: +${enhancedCount} pixels (hysteresis + gap bridging)`);
 
   // ── Border budget safety valve ──
-  // If total border pixels exceed 15% of image, the dark achromatic criterion
-  // and hysteresis are fragmenting the scene (common in dark game backgrounds).
-  // Strip back to gradient-only borders which are more reliable.
+  // If total border pixels exceed 15% of image, dark achromatic borders are
+  // fragmenting the scene (common in dark game backgrounds).
+  // Only strip non-gradient borders in the CENTER of the image (25%-65% height)
+  // where scene content lives. Keep borders in UI bar zones (top/bottom edges)
+  // so the UI bars remain properly segmented.
   let borderTotal = 0;
   for (let i = 0; i < total; i += 1) if (isBorder[i]) borderTotal += 1;
   if (borderTotal > total * 0.15) {
-    console.log(`[v5+] Border budget exceeded: ${borderTotal} pixels (${(borderTotal/total*100).toFixed(1)}%). Stripping to gradient-only.`);
+    console.log(`[v5+] Border budget exceeded: ${borderTotal} pixels (${(borderTotal/total*100).toFixed(1)}%). Stripping center-zone non-gradient borders.`);
     let stripped = 0;
     for (let i = 0; i < total; i += 1) {
-      if (isBorder[i] && gradient[i] < gradThreshold) {
+      if (!isBorder[i]) continue;
+      if (gradient[i] >= gradThreshold) continue; // keep gradient borders everywhere
+      const y = Math.floor(i / width);
+      const yRatio = y / height;
+      // Only strip in center zone — preserve top 25% and bottom 35% (UI bar zones)
+      if (yRatio > 0.25 && yRatio < 0.65) {
         isBorder[i] = 0;
         stripped += 1;
       }
     }
-    console.log(`[v5+] Stripped ${stripped} non-gradient border pixels`);
+    console.log(`[v5+] Stripped ${stripped} center-zone non-gradient border pixels`);
   }
 
   // ── Pass 2c: Horizontal structure border detection ──
