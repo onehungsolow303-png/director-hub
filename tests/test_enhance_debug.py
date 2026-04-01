@@ -71,10 +71,9 @@ def main():
         page.wait_for_timeout(2000)
         screenshot(page, "02_image_loaded.png")
 
-        # --- Step 3: Set tone to Light, model to RMBG-2.0 ---
-        print("Step 3: Setting tone=light, model=RMBG-2.0...")
+        # --- Step 3: Set tone to Light ---
+        print("Step 3: Setting tone=light...")
         page.select_option("#bgTone", "light")
-        page.select_option("#comfyuiModel", "RMBG-2.0")
         page.wait_for_timeout(500)
         screenshot(page, "03_settings.png")
 

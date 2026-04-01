@@ -286,16 +286,7 @@ def run_tests():
         time.sleep(0.3)
         set_preset(page, "light-balanced")
 
-        # Select RMBG-2.0 model
-        page.select_option("#comfyuiModel", "RMBG-2.0")
-        time.sleep(0.3)
-
         save_screenshot(page, "light_ai_settings")
-
-        # Check ComfyUI connectivity first
-        comfyui_dot = page.evaluate("() => document.querySelector('#comfyuiDot')?.style.background")
-        comfyui_status = page.text_content("#comfyuiStatus") or ""
-        print(f"  ComfyUI status: {comfyui_status} (dot: {comfyui_dot})")
 
         status_text = click_ai_remove_and_wait(page, timeout_s=60)
         print(f"  Status: {status_text[:120]}")
@@ -320,7 +311,6 @@ def run_tests():
             "canvas_stats": canvas_stats,
             "panel_count": panel_count,
             "panel_dims": panel_dims,
-            "comfyui_available": "green" in (comfyui_dot or ""),
             "ai_failed": ai_failed,
         }
 

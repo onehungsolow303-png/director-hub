@@ -25,13 +25,13 @@ REPORTS_DIR = ROOT / "tests" / "reports"
 
 @pytest.fixture(scope="session", autouse=True)
 def ensure_services_ready():
-    """Auto-start ComfyUI + serve.py before any test that needs them.
+    """Auto-start serve.py before any test that needs it.
 
-    Runs once per session. Detects already-running services and
+    Runs once per session. Detects already-running service and
     restarts serve.py if source files changed since it started.
     """
-    comfyui_port, serve_ok = ensure_services()
-    yield comfyui_port, serve_ok
+    _unused, serve_ok = ensure_services()
+    yield None, serve_ok
 
 
 @pytest.fixture(scope="session")

@@ -1,4 +1,4 @@
-"""Test launcher — boots ComfyUI + serve.py, then runs pytest.
+"""Test launcher — boots serve.py, then runs pytest.
 
 Usage:
     .venv/Scripts/python.exe tests/launcher.py [pytest args...]
@@ -10,11 +10,10 @@ Examples:
     .venv/Scripts/python.exe tests/launcher.py --production-loop
 
 The launcher:
-1. Detects if ComfyUI is running — launches it if not
-2. Detects if serve.py is running — launches it if not
-3. Checks if serve.py is stale (source files changed) — restarts if so
-4. Runs pytest with all forwarded arguments
-5. Cleans up serve.py on exit (ComfyUI stays running)
+1. Detects if serve.py is running — launches it if not
+2. Checks if serve.py is stale (source files changed) — restarts if so
+3. Runs pytest with all forwarded arguments
+4. Cleans up serve.py on exit
 """
 
 import atexit
@@ -42,7 +41,7 @@ def main(args=None):
         args = [a for a in args if a != "--production-loop"]
 
     # Boot services
-    comfyui_port, serve_ok = server_manager.ensure_services()
+    _unused, serve_ok = server_manager.ensure_services()
 
     if not serve_ok:
         print("FATAL: serve.py failed to start. Cannot run tests.")

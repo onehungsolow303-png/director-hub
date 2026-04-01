@@ -151,8 +151,8 @@ def print_metrics(metrics):
 
 
 def main():
-    # Boot services (ComfyUI + serve.py)
-    comfyui_port, serve_ok = ensure_services()
+    # Boot services (serve.py)
+    _unused, serve_ok = ensure_services()
     if not serve_ok:
         print("FATAL: serve.py failed to start. Cannot run production loop.")
         return False

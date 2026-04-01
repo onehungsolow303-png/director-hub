@@ -58,10 +58,10 @@ def test_fail_job():
     mgr = JobManager()
     job_id = mgr.create("extract", {})
     mgr.update(job_id, status="processing")
-    mgr.update(job_id, status="failed", error="ComfyUI timeout", code="TIMEOUT")
+    mgr.update(job_id, status="failed", error="processing timeout", code="TIMEOUT")
     job = mgr.get(job_id)
     assert job["status"] == "failed"
-    assert job["error"] == "ComfyUI timeout"
+    assert job["error"] == "processing timeout"
     assert job["code"] == "TIMEOUT"
     assert job["completed_at"] is not None
     print("  PASS test_fail_job")

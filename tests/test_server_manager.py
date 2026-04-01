@@ -7,28 +7,10 @@ from pathlib import Path
 import pytest
 
 from helpers.server_manager import (
-    is_comfyui_running,
     is_serve_running,
     is_serve_stale,
     SOURCE_FILES,
 )
-
-
-def test_comfyui_not_running():
-    """When no ComfyUI is listening, is_comfyui_running returns None."""
-    with patch("helpers.server_manager.urllib.request.urlopen", side_effect=Exception("refused")):
-        assert is_comfyui_running() is None
-
-
-def test_comfyui_running():
-    """When ComfyUI responds on a port, return that port."""
-    mock_resp = MagicMock()
-    mock_resp.status = 200
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-    with patch("helpers.server_manager.urllib.request.urlopen", return_value=mock_resp):
-        result = is_comfyui_running()
-        assert result is not None
 
 
 def test_serve_not_running():
