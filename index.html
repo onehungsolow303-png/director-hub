@@ -46,7 +46,6 @@
               <span>Batch processing mode</span>
               <select id="batchAiSource">
                 <option value="direct">Direct background removal (no AI mask)</option>
-                <option value="comfyui">AI mask via ComfyUI + background removal (2-pass)</option>
                 <option value="browser">AI mask via Browser AI + background removal (2-pass, draft)</option>
               </select>
             </label>
@@ -57,21 +56,6 @@
                 <option value="light">Light (white)</option>
               </select>
             </label>
-            <label class="field">
-              <span>Segmentation Model</span>
-              <select id="comfyuiModel">
-                <option value="BiRefNet-general">BiRefNet General</option>
-                <option value="BiRefNet-HR">BiRefNet HR</option>
-                <option value="BiRefNet_512x512">BiRefNet 512 (fast)</option>
-                <option value="RMBG-2.0">RMBG 2.0</option>
-                <option value="INSPYRENET">InSPyReNet</option>
-                <option value="BEN2">BEN2</option>
-              </select>
-            </label>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <span id="comfyuiDot" style="width:8px;height:8px;border-radius:50%;background:#666;display:inline-block"></span>
-              <span id="comfyuiStatus" class="helper-copy" style="margin:0;font-size:12px">ComfyUI: checking...</span>
-            </div>
             <div class="btn-row" style="margin-top:8px">
               <button id="aiRemoveButton" class="primary-button" type="button" style="background:var(--accent);width:100%">AI Remove</button>
             </div>
@@ -114,15 +98,9 @@
               </select>
             </label>
 
-            <div class="tool-group-label">ComfyUI &amp; AI Mask</div>
-            <label class="field">
-              <span>ComfyUI Server</span>
-              <input id="comfyuiServer" type="text" value="http://127.0.0.1:8000" placeholder="http://127.0.0.1:8000">
-            </label>
+            <div class="tool-group-label">AI Mask</div>
             <div class="btn-row" style="margin-bottom:10px">
-              <button id="comfyuiConnectButton" class="ghost-button" type="button">Test Connection</button>
-              <button id="comfyuiGenerateMaskButton" class="primary-button" type="button">Generate AI Mask</button>
-              <button id="browserMaskButton" class="ghost-button" type="button">Quick Mask (Browser)</button>
+              <button id="browserMaskButton" class="primary-button" type="button">Generate AI Mask</button>
             </div>
             <p id="browserMaskStatus" class="helper-copy">Browser AI: model not loaded</p>
 
