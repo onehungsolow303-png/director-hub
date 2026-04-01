@@ -1305,15 +1305,17 @@ function buildBlackBorderUiMask(sourceData, width, height, externalBorderMap) {
   console.log(`[v5+] Border enhancement: +${enhancedCount} pixels (hysteresis + gap bridging)`);
 
   // ── Pass 2c: Horizontal structure border detection ──
-  // Detect continuous horizontal lines of dark/border-like pixels that span
-  // a significant width. These are UI bar boundaries (top/bottom of panels)
-  // that the gradient detector misses when both sides are dark.
+  // Detect thin horizontal lines (1-3px tall) of very dark pixels that span
+  // most of the image width. These are UI bar edge boundaries that the
+  // gradient detector misses when both sides are dark.
+  // Only marks rows that are part of thin dark bands — NOT large dark areas.
+  // This prevents dark game backgrounds from being fragmented into tiny regions.
   let structBorderCount = 0;
+  // First: find candidate rows (very dark, spanning most of width)
+  const rowDarkScore = new Float32Array(height);
   for (let y = 0; y < height; y += 1) {
-    // Only apply in top 25% and bottom 35% — UI bars live at edges, not in scene center
     const yRatio = y / height;
     if (yRatio > 0.25 && yRatio < 0.65) continue;
-    // Count dark achromatic pixels in this row that aren't already borders
     let darkRun = 0, maxDarkRun = 0, darkTotal = 0;
     for (let x = 0; x < width; x += 1) {
       const idx = y * width + x;
@@ -1321,24 +1323,41 @@ function buildBlackBorderUiMask(sourceData, width, height, externalBorderMap) {
       const off = idx * 4;
       const maxCh = Math.max(data[off], data[off + 1], data[off + 2]);
       const minCh = Math.min(data[off], data[off + 1], data[off + 2]);
-      if (maxCh < 70 && maxCh - minCh <= 18) {
+      if (maxCh < 45 && maxCh - minCh <= 10) {
         darkRun += 1; darkTotal += 1;
         if (darkRun > maxDarkRun) maxDarkRun = darkRun;
       } else { darkRun = 0; }
     }
-    // If this row has a long continuous dark run (>20% of width), mark as border
-    if (maxDarkRun > width * 0.20 && darkTotal > width * 0.25) {
+    if (maxDarkRun > width * 0.40) rowDarkScore[y] = darkTotal / width;
+  }
+  // Second: only mark rows that are isolated dark bands (not part of large dark regions).
+  // A structural border is 1-3px tall. If 5+ consecutive rows are all dark candidates,
+  // that's a dark background area, not a border line.
+  for (let y = 0; y < height; y += 1) {
+    if (rowDarkScore[y] < 0.30) continue;
+    // Count consecutive dark-candidate rows around this one
+    let bandHeight = 0;
+    for (let y2 = y; y2 < height && rowDarkScore[y2] >= 0.30; y2 += 1) bandHeight += 1;
+    if (bandHeight > 4) {
+      // Skip entire band — this is a dark area, not a border line
+      y += bandHeight - 1;
+      continue;
+    }
+    // Mark this thin band as structural borders
+    for (let dy = 0; dy < bandHeight; dy += 1) {
+      const row = y + dy;
       for (let x = 0; x < width; x += 1) {
-        const idx = y * width + x;
+        const idx = row * width + x;
         if (isBorder[idx]) continue;
         const off = idx * 4;
         const maxCh = Math.max(data[off], data[off + 1], data[off + 2]);
         const minCh = Math.min(data[off], data[off + 1], data[off + 2]);
-        if (maxCh < 70 && maxCh - minCh <= 18) {
+        if (maxCh < 45 && maxCh - minCh <= 10) {
           isBorder[idx] = 1; structBorderCount += 1;
         }
       }
     }
+    y += bandHeight - 1;
   }
   if (structBorderCount > 0) console.log(`[v5+] Structural horizontal borders: +${structBorderCount} pixels`);
 
