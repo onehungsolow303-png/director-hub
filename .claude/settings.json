@@ -1,7 +1,6 @@
 {
   "agent": "ceo",
   "env": {
-    "COMFYUI_URL": "http://127.0.0.1:8000",
     "APP_URL": "http://127.0.0.1:8080",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },

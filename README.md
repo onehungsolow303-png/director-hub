@@ -29,6 +29,5 @@ Open [index.html](C:\Dev\Image generator\index.html) in a browser. The app opens
 
 ## Notes
 
-- The exported JSON is an API-style workflow template, not a full saved canvas layout from the ComfyUI UI.
-- Custom-node class names can vary slightly between packs. The app keeps those visible so you can swap the exact node if your install uses a different internal name.
 - PNG should be used for transparent exports.
+- Browser ONNX (u2netp) provides AI segmentation masks without external dependencies.
