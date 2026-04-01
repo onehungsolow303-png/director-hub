@@ -1,21 +1,18 @@
-# ComfyUI Asset Editor Builder
+# Gut It Out — UI Asset and Object Extractor
 
-This is a lightweight offline starter app for planning ComfyUI workflows for:
-
-- background removal
-- game UI generation
-- combined generate-and-cutout pipelines
+A specialized tool for cleanly extracting game UI elements and objects from screenshots while preserving quality, borders, and transparency.
 
 ## What it does
 
-- asks plain-language setup questions
-- lists the exact node names to install
-- generates model-specific positive and negative prompts
-- exports a ComfyUI API workflow JSON template
+- Detects and isolates game UI elements from their background
+- Preserves UI borders and fine details intact
+- Maintains original size, position, and resolution
+- Removes background while keeping UI on transparent background
+- Uses multi-spectrum border detection with invert-selection architecture (v5+)
 
 ## Run it
 
-Open [index.html](C:\Dev\Image generator\index.html) in a browser.
+Open [index.html](C:\Dev\Image generator\index.html) in a browser. The app opens directly in the browser; the Python server is optional and needed only for Python API endpoints (border detection, extraction).
 
 ## QA and continuity
 

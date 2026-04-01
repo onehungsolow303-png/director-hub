@@ -69,14 +69,14 @@ python serve.py              # Dev server at http://127.0.0.1:8080
 python screenshot.py [url]   # Playwright visual testing
 ```
 
-App also opens directly via `index.html` — server only needed for ComfyUI proxy.
+App also opens directly via `index.html` — server needed for Python API endpoints (border detection, extraction).
 
 ## Architecture
 
-- **`index.html`** — Two-tab layout: Extraction + Workflow Builder
+- **`index.html`** — Single-page extraction UI
 - **`app.js`** — All logic (~5800 lines, vanilla JS)
 - **`styles.css`** — Dark theme, CSS Grid
-- **`serve.py`** — HTTP server + CORS proxy + `/save-mask`
+- **`serve.py`** — HTTP server + Python API endpoints
 
 ### Detection Engine (v5+ invert-selection)
 
