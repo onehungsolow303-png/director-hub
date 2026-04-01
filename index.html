@@ -11,9 +11,6 @@
   <main class="app-shell">
     <nav class="sidebar">
       <div class="sidebar-brand">Gut It Out</div>
-      <div class="sidebar-group">Tools</div>
-      <a class="sidebar-link active" data-tab="extraction">Extraction</a>
-      <a class="sidebar-link" data-tab="workflow">Workflow Builder</a>
     </nav>
 
     <header class="topbar">
@@ -22,9 +19,6 @@
     </header>
 
     <div class="main-content">
-
-    <!-- ══ TAB: Extraction ══ -->
-    <div class="tab-page active" id="tab-extraction">
 
     <div class="cutter-grid">
       <section class="cutter-controls">
@@ -328,144 +322,9 @@
 
       </section>
     </div>
-    </div><!-- end tab-extraction -->
-
-    <!-- ══ TAB: Workflow Builder ══ -->
-    <div class="tab-page" id="tab-workflow">
-    <section class="hero">
-      <p class="eyebrow">Node-Based ComfyUI Builder</p>
-      <h1>Build clean game assets without guessing what node goes where.</h1>
-      <p class="hero-copy">
-        Answer a few blunt, practical questions. The app gives you the exact nodes to install,
-        model-ready prompts, and a workflow JSON template for background removal, game UI generation,
-        or both together.
-      </p>
-      <div class="hero-actions">
-        <button id="loadDemoButton" class="primary-button" type="button">Load a Safe Starter Setup</button>
-        <button id="copyChecklistButton" class="ghost-button" type="button">Copy Install Checklist</button>
-      </div>
-    </section>
-
-    <section class="panel-grid">
-      <form id="workflowForm" class="panel form-panel">
-        <div class="panel-heading">
-          <h2>1. What are we building?</h2>
-          <p>Pick the pipeline first. The app fills in sane defaults.</p>
-        </div>
-
-        <label class="field">
-          <span>Workflow type</span>
-          <select name="workflowType">
-            <option value="combined">Generate UI and remove the background</option>
-            <option value="background">Only remove the background from existing images</option>
-            <option value="ui">Only generate UI elements</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>What kind of game UI do you want?</span>
-          <select name="artStyle">
-            <option value="fantasy">Fantasy RPG</option>
-            <option value="scifi">Sci-Fi / Cyberpunk</option>
-            <option value="pixel">Pixel Art</option>
-            <option value="clean">Clean Mobile / Casual</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Which image model are you using?</span>
-          <select name="checkpoint">
-            <option value="juggernautXL">Juggernaut XL</option>
-            <option value="flux">Flux</option>
-            <option value="sdxl">Generic SDXL checkpoint</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Which background remover do you want?</span>
-          <select name="remover">
-            <option value="essentials">ComfyUI Essentials / TransparencyBackgroundRemover</option>
-            <option value="bria">ComfyUI-BRIA_AI-RMBG</option>
-            <option value="was">WAS Node Suite / Image Rembg</option>
-            <option value="ben2">BEN2</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>What are you making?</span>
-          <input name="assetType" type="text" value="ornate inventory button" placeholder="Example: mana orb icon">
-        </label>
-
-        <label class="field">
-          <span>Extra material or theme details</span>
-          <input name="material" type="text" value="ornate gold border, carved stone backing, glowing rune core" placeholder="Example: glass, neon, brushed metal">
-        </label>
-
-        <label class="field checkbox-field">
-          <input name="batchMode" type="checkbox">
-          <span>I want batch processing for a folder of source images</span>
-        </label>
-
-        <label class="field checkbox-field">
-          <input name="pixelEdges" type="checkbox">
-          <span>I need crisp edges for sprites or pixel-style UI</span>
-        </label>
-
-        <button class="primary-button full-width" type="submit">Build My Workflow</button>
-      </form>
-
-      <section class="panel output-panel">
-        <div class="panel-heading">
-          <h2>2. Use this setup</h2>
-          <p>Everything updates as soon as you build the workflow.</p>
-        </div>
-
-        <div class="output-block">
-          <h3>Exact nodes to install</h3>
-          <ul id="installList" class="checklist"></ul>
-        </div>
-
-        <div class="output-block">
-          <h3>Plain-English setup steps</h3>
-          <ol id="stepsList" class="steps"></ol>
-        </div>
-
-        <div class="output-block">
-          <h3>Model-specific positive prompt</h3>
-          <pre id="positivePrompt" class="code-block"></pre>
-        </div>
-
-        <div class="output-block">
-          <h3>Negative prompt</h3>
-          <pre id="negativePrompt" class="code-block"></pre>
-        </div>
-
-        <div class="output-block">
-          <h3>ComfyUI API workflow JSON template</h3>
-          <pre id="workflowJson" class="code-block large"></pre>
-        </div>
-
-        <div class="button-row">
-          <button id="copyJsonButton" class="ghost-button" type="button">Copy JSON</button>
-          <button id="downloadJsonButton" class="primary-button" type="button">Download JSON</button>
-        </div>
-      </section>
-    </section>
-    </div><!-- end tab-workflow -->
 
     </div><!-- end main-content -->
   </main>
-  <script>
-  function showTab(name){
-    document.querySelectorAll('.tab-page').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));
-    var tab=document.getElementById('tab-'+name);if(tab)tab.classList.add('active');
-    var link=document.querySelector('.sidebar-link[data-tab="'+name+'"]');if(link)link.classList.add('active');
-  }
-  document.querySelectorAll('.sidebar-link[data-tab]').forEach(function(l){
-    l.addEventListener('click',function(){showTab(this.dataset.tab);});
-  });
-  </script>
   <script src="app.js?v=11"></script>
 </body>
 </html>
