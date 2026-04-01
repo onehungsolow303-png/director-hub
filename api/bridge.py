@@ -226,33 +226,6 @@ class AppBridge:
             )
             return {"ok": False, "error": str(exc), "status": status}
 
-    def generate_mask_only(
-        self,
-        page,
-        on_progress: Optional[Callable[[str], None]] = None,
-        timeout_s: int = 180,
-    ) -> Dict[str, Any]:
-        """Click Generate AI Mask and poll #comfyuiStatus until done or timeout."""
-        page.click("#comfyuiGenerateMaskButton")
-
-        deadline = time.time() + timeout_s
-        last_text = ""
-        while time.time() < deadline:
-            time.sleep(1)
-            status = page.evaluate(
-                "() => { const el = document.querySelector('#comfyuiStatus'); return el ? el.textContent : ''; }"
-            )
-            if status != last_text:
-                last_text = status
-                if on_progress:
-                    on_progress(status)
-            if status and ("mask generated" in status.lower()):
-                return {"ok": True, "status": status}
-            if status and ("error" in status.lower()):
-                return {"ok": False, "status": status, "error": status}
-
-        return {"ok": False, "status": last_text, "error": "timeout"}
-
     # ------------------------------------------------------------------
     # Canvas extraction
     # ------------------------------------------------------------------
@@ -398,71 +371,10 @@ class AppBridge:
         return {"ok": True, "count": len(saved_panels), "panels": saved_panels}
 
     # ------------------------------------------------------------------
-    # ComfyUI / workflow builder
+    # Presets
     # ------------------------------------------------------------------
-
-    def get_comfyui_status(self, page) -> str:
-        """Read the #comfyuiStatus element text."""
-        return page.evaluate(
-            "() => { const el = document.querySelector('#comfyuiStatus'); return el ? el.textContent : ''; }"
-        )
 
     def get_presets(self, page) -> Dict[str, Any]:
         """Read bgPresets from app.js and return as a Python dict."""
         return page.evaluate("() => typeof bgPresets !== 'undefined' ? bgPresets : {}")
 
-    def build_workflow(self, page, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Fill the workflow builder form with config values, submit, and return the JSON.
-
-        config keys map to form element name attributes:
-            workflowType, artStyle, checkpoint, remover,
-            assetType, material, batchMode, pixelEdges
-        """
-        # Switch to the workflow tab so the form is interactive
-        page.evaluate("() => { if (typeof showTab === 'function') showTab('workflow'); }")
-        page.wait_for_timeout(300)
-
-        # Fill form fields
-        result = page.evaluate(
-            """(config) => {
-                const form = document.querySelector('#workflowForm');
-                if (!form) return { ok: false, error: 'workflowForm not found' };
-
-                for (const [name, value] of Object.entries(config)) {
-                    const el = form.querySelector('[name="' + name + '"]');
-                    if (!el) continue;
-                    if (el.type === 'checkbox') {
-                        el.checked = Boolean(value);
-                    } else {
-                        el.value = String(value);
-                    }
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-
-                // Submit the form to trigger workflow generation
-                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-                return { ok: true };
-            }""",
-            config,
-        )
-
-        if not result.get("ok"):
-            return result
-
-        # Wait briefly for the workflow JSON to render
-        page.wait_for_timeout(500)
-
-        workflow_text = page.evaluate(
-            "() => { const el = document.querySelector('#workflowJson'); return el ? el.textContent : ''; }"
-        )
-
-        if not workflow_text or not workflow_text.strip():
-            return {"ok": False, "error": "workflowJson element is empty after form submit"}
-
-        import json as _json
-        try:
-            workflow = _json.loads(workflow_text)
-        except _json.JSONDecodeError as exc:
-            return {"ok": False, "error": f"JSON parse error: {exc}", "raw": workflow_text}
-
-        return {"ok": True, "workflow": workflow}

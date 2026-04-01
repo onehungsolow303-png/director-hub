@@ -12,7 +12,7 @@ def register(router):
         image = params.get("image")
         if not image:
             return 400, {"error": "Missing required field: image", "code": "NO_IMAGE"}
-        method = params.get("method", "comfyui")
+        method = params.get("method", "browser")
         model = params.get("model", "BiRefNet-general")
         output_dir = params.get("output_dir", "output")
 
@@ -89,8 +89,9 @@ def _run_mask_job(router, job_id, image, method, model, output_dir):
             abs_image = resolve_path(image)
             router.bridge.load_image(page, abs_image)
             router.jobs.update(job_id, progress=0.3, step="Generating mask...")
-            page.evaluate("(m) => { const el = document.querySelector('#comfyuiModel'); if (el) el.value = m; }", model)
-            result = router.bridge.generate_mask_only(page)
+            page.evaluate("(m) => { const el = document.querySelector('#aiModel'); if (el) el.value = m; }", model)
+            result = router.bridge.run_ai_remove(page,
+                on_progress=lambda step: router.jobs.update(job_id, progress=0.5, step=step))
             if not result.get("ok"):
                 router.jobs.update(job_id, status="failed", error=result.get("error", "Failed"), code="MASK_FAILED")
                 return

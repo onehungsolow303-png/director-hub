@@ -1,8 +1,5 @@
 # api/endpoints/config.py
-"""Configuration endpoints: GET /api/presets, POST /api/preset, GET /api/comfyui/status"""
-import json
-import urllib.request
-import urllib.error
+"""Configuration endpoints: GET /api/presets, POST /api/preset"""
 
 
 def register(router):
@@ -41,25 +38,5 @@ def register(router):
         router._custom_presets[name] = settings
         return 200, {"ok": True, "name": name}
 
-    def handle_comfyui_status(params):
-        try:
-            req = urllib.request.Request("http://127.0.0.1:8000/system_stats")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read())
-                system = data.get("system", {})
-                devices = data.get("devices", [{}])
-                gpu_name = devices[0].get("name", "unknown") if devices else "unknown"
-                return 200, {
-                    "connected": True,
-                    "port": 8000,
-                    "version": system.get("comfyui_version", "unknown"),
-                    "gpu": gpu_name,
-                    "ram_free_gb": round(system.get("ram_free", 0) / 1e9, 1),
-                    "python_version": system.get("python_version", "unknown")
-                }
-        except Exception:
-            return 200, {"connected": False, "port": 8000, "error": "ComfyUI not reachable"}
-
     router.register_get("/api/presets", handle_get_presets)
     router.register_post("/api/preset", handle_create_preset)
-    router.register_get("/api/comfyui/status", handle_comfyui_status)

@@ -44,7 +44,7 @@ def _handle_batch(router):
             return 400, {"error": "Missing required field: images", "code": "NO_IMAGE"}
         preset = params.get("preset", "dark-balanced")
         mode = params.get("mode", "ai-remove")
-        ai_source = params.get("ai_source", "comfyui")
+        ai_source = params.get("ai_source", "browser")
         output_dir = params.get("output_dir", os.path.join("output", "batch"))
 
         job_id = router.jobs.create("batch", {
