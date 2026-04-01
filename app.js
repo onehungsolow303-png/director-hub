@@ -256,11 +256,9 @@ function updateMaskStatusBlock() {
     : bgDecontaminate && bgDecontaminate.checked
       ? "Heuristic edge cleanup active"
       : "No edge cleanup";
-  const aiLabel = comfyuiConnected
-    ? "AI hook: ComfyUI connected"
-    : aiMaskCanvas
-      ? "AI hook: External AI mask loaded"
-      : "AI hook: Not connected — use 'Test Connection' or 'Generate AI Mask'";
+  const aiLabel = aiMaskCanvas
+    ? "AI hook: AI mask loaded"
+    : "AI hook: Use 'Generate AI Mask' or 'Load AI Mask PNG'";
 
   maskStatusBlock.innerHTML = `<strong>Mask pipeline</strong><br>Source: ${sourceLabel}<br>Matte refinement: ${matteLabel}<br>${aiLabel}`;
 }
@@ -268,9 +266,7 @@ function updateMaskStatusBlock() {
 function getIdleGuidanceMessage() {
   if (!loadedImage) return "Upload an image to start.";
   if (bgMode.value === "ai") {
-    return comfyuiConnected
-      ? `AI mode ready. Click 'Generate AI Mask' to run segmentation via ComfyUI, or 'Load AI Mask PNG' for an external matte. ${getImageWorkHint(loadedImage.width, loadedImage.height)}`
-      : `AI mode ready. Click 'Generate AI Mask' to connect to ComfyUI and run segmentation, or 'Load AI Mask PNG' for an external matte. ${getImageWorkHint(loadedImage.width, loadedImage.height)}`;
+    return `AI mode ready. Click 'Generate AI Mask' for browser segmentation, or 'Load AI Mask PNG' for an external matte. ${getImageWorkHint(loadedImage.width, loadedImage.height)}`;
   }
   if (bgMode.value === "multi" && manualBackgroundSamples.length === 0) {
     return "Multi-point mode: click 'Sample Background Point(s)' and add 3-4 empty background clicks.";
@@ -513,8 +509,6 @@ function applyPreset(name) {
   if (bgAiInvertMask) bgAiInvertMask.checked = preset.aiInvertMask ?? false;
   if (bgAiMaskExpand) bgAiMaskExpand.value = String(preset.aiMaskExpand ?? 0);
   if (bgAiMaskFeather) bgAiMaskFeather.value = String(preset.aiMaskFeather ?? 0);
-  // ComfyUI model selection from preset
-  if (preset.comfyui && comfyuiModel) comfyuiModel.value = preset.comfyui.model;
   updateRangeLabels();
 }
 
@@ -527,7 +521,7 @@ function createCanvas(width, height) {
 
 /**
  * Draw an Image onto a canvas preserving RGB even when alpha=0.
- * ComfyUI outputs masks as RGBA with alpha=0 but data in RGB.
+ * Some mask sources output RGBA with alpha=0 but data in RGB.
  * Canvas drawImage uses premultiplied alpha, zeroing RGB when alpha=0.
  * This function draws via putImageData (which bypasses premultiplication)
  * by first rendering through a WebGL context configured for unpremultiplied alpha.
@@ -2078,14 +2072,7 @@ async function aiRemoveWorkflow() {
     const testAlpha = getRefinedImportedAiAlpha(testSettings);
     const coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
     if (coverage < 0.005) {
-      // Hybrid mask is empty — fall back to ComfyUI if connected
-      if (comfyuiConnected) {
-        if (aiRemoveStatus) aiRemoveStatus.textContent = "Hybrid detection found nothing — trying ComfyUI...";
-        await generateComfyuiMask();
-        if (!importedAiMaskAlpha) throw new Error("Both hybrid and ComfyUI mask generation failed.");
-      } else {
-        throw new Error("No UI regions detected. Try adjusting the background tone or using manual tools.");
-      }
+      throw new Error("No UI regions detected. Try adjusting the background tone or using manual tools.");
     }
 
     if (aiRemoveStatus) {
@@ -4971,17 +4958,6 @@ async function processBatchImages() {
     return;
   }
 
-  const aiSource = batchAiSource ? batchAiSource.value : "browser";
-  const modelType = comfyuiModel ? comfyuiModel.value : "BiRefNet-general";
-
-  if (aiSource === "comfyui") {
-    const connected = await testComfyuiConnection();
-    if (!connected) {
-      if (bgStatus) bgStatus.textContent = "ComfyUI connection failed. Check the server or switch to another mode.";
-      return;
-    }
-  }
-
   const settings = getBgSettings();
   settings.manualBackgroundColor = null;
   settings.manualBackgroundSamples = [];
@@ -5043,11 +5019,7 @@ async function processBatchImages() {
         setProcessingState(true, `Batch ${i + 1}/${total}: AI mask — ${file.name}`);
 
         let maskAlpha;
-        if (aiSource === "comfyui") {
-          maskAlpha = await generateComfyuiMaskForImage(image, modelType);
-        } else {
-          maskAlpha = await generateBrowserMaskForImage(image);
-        }
+        maskAlpha = await generateBrowserMaskForImage(image);
 
         if (batchCancelRequested || cancelProcessingRequested) {
           if (bgStatus) bgStatus.textContent = `Batch canceled after ${i} of ${total} images.`;
@@ -5364,44 +5336,6 @@ function handleFileInput(event) {
   image.src = url;
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  refreshOutput(formStateToConfig());
-});
-
-copyJsonButton.addEventListener("click", () => {
-  if (!currentPayload) return;
-  copyText(JSON.stringify(currentPayload.workflow, null, 2));
-});
-
-copyChecklistButton.addEventListener("click", () => {
-  if (!currentPayload) return;
-  copyText(currentPayload.installItems.join("\n"));
-});
-
-downloadJsonButton.addEventListener("click", () => {
-  if (!currentPayload) return;
-  const blob = new Blob([JSON.stringify(currentPayload.workflow, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "comfyui-workflow-template.json";
-  link.click();
-  URL.revokeObjectURL(url);
-});
-
-loadDemoButton.addEventListener("click", () => {
-  form.workflowType.value = "combined";
-  form.artStyle.value = "fantasy";
-  form.checkpoint.value = "juggernautXL";
-  form.remover.value = "essentials";
-  form.assetType.value = "ornate inventory button";
-  form.material.value = "ornate gold border, carved stone backing, glowing rune core";
-  form.batchMode.checked = false;
-  form.pixelEdges.checked = false;
-  refreshOutput(formStateToConfig());
-});
-
 bgPreset.addEventListener("change", () => applyPreset(bgPreset.value));
 // Auto-switch to matching balanced preset when tone changes
 bgTone.addEventListener("change", () => {
@@ -5668,12 +5602,6 @@ if (downloadMaskButton) {
 if (aiMaskInput) {
   aiMaskInput.addEventListener("change", handleAiMaskInput);
 }
-if (comfyuiConnectButton) {
-  comfyuiConnectButton.addEventListener("click", testComfyuiConnection);
-}
-if (comfyuiGenerateMaskButton) {
-  comfyuiGenerateMaskButton.addEventListener("click", generateComfyuiMask);
-}
 if (browserMaskButton) {
   browserMaskButton.addEventListener("click", generateBrowserMask);
 }
@@ -5707,15 +5635,12 @@ downloadPanelsButton.addEventListener("click", async () => {
 });
 
 applyPreset(bgPreset.value);
-refreshOutput(formStateToConfig());
 renderSplitLinks();
 updateRangeLabels();
 updateSampleMeta();
 setProcessingState(false);
 bgStatus.textContent = "Upload an image, select background tone, then click AI Remove.";
 
-// Auto-connect to ComfyUI on page load (silent)
-testComfyuiConnection().catch(() => {});
 updateActionStates();
 updateSplitFilterButtons();
 updateSplitPanelThresholdLabel();
