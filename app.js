@@ -1,35 +1,3 @@
-const stylePresets = {
-  fantasy: {
-    positive: "game ui kit, fantasy RPG style, {assetType}, {material}, ornate craftsmanship, 2d game art, centered composition, isolated on white background, sharp edges, highly detailed, professional asset sheet",
-    negative: "blurry, text, watermark, realistic photo, character, overlapping parts, background clutter, low resolution, messy silhouette"
-  },
-  scifi: {
-    positive: "futuristic game ui, {assetType}, holographic panels, {material}, neon accents, clean geometry, minimalist hud design, centered, isolated on black background, crisp lines, studio quality, high detail",
-    negative: "blurry, organic mess, fantasy ornament, text, watermark, low contrast, noisy background, low resolution, distorted proportions"
-  },
-  pixel: {
-    positive: "pixel art game ui asset, {assetType}, {material}, centered, isolated background, limited palette, crisp silhouette, readable shape language, production-ready sprite, sharp edges, game asset sheet",
-    negative: "blur, anti-aliased smudge, painterly, photographic, text, watermark, extra objects, fuzzy outline, soft lighting, low resolution"
-  },
-  clean: {
-    positive: "mobile game ui asset, {assetType}, {material}, polished casual style, soft readable shapes, centered, isolated on white background, bright color separation, clean edges, highly detailed, professional",
-    negative: "gritty realism, muddy colors, text, watermark, cluttered composition, overlapping, low resolution, background scene, shadows"
-  }
-};
-
-const checkpoints = {
-  juggernautXL: { name: "Juggernaut XL", sampler: "dpmpp_2m_sde", scheduler: "karras", steps: 30, cfg: 6.5, width: 1024, height: 1024, denoise: 1 },
-  flux: { name: "Flux", sampler: "euler", scheduler: "simple", steps: 24, cfg: 3.5, width: 1024, height: 1024, denoise: 1 },
-  sdxl: { name: "SDXL", sampler: "dpmpp_2m", scheduler: "karras", steps: 28, cfg: 7, width: 1024, height: 1024, denoise: 1 }
-};
-
-const removers = {
-  essentials: { processNode: "TransparencyBackgroundRemover", nodes: ["ComfyUI Essentials", "TransparencyBackgroundRemover", "Load Image", "Save Image"], tips: ["Set the node to keep alpha transparency.", "If you are doing sprites, enable the sharpest edge mode available."] },
-  bria: { processNode: "BRIA RMBG Processor", nodes: ["ComfyUI-BRIA_AI-RMBG", "Load Image", "BRIA RMBG Model Loader", "BRIA RMBG Processor", "Save Image"], tips: ["Use RMBG-1.4 or 2.0 depending on what you installed.", "Save as PNG so the transparent alpha channel survives."] },
-  was: { processNode: "Image Rembg", nodes: ["WAS Node Suite", "Load Image", "Image Rembg", "Save Image"], tips: ["Start with isnet-general-use for regular assets.", "Switch to anime or u2net models when outlines need different bias."] },
-  ben2: { processNode: "BEN2 Background Removal", nodes: ["BEN2 custom nodes", "Load Image", "BEN2 Background Removal", "Save Image"], tips: ["BEN2 is a strong choice when hair, cloth, or soft edges matter.", "Check output masks for tiny holes before batch exporting."] }
-};
-
 const bgPresets = {
   // Dark background presets (game screenshots, complex scenic backgrounds)
   // Production-tested 2026-03-29: IoU=0.965, SSIM=0.760, MAE=6.24
@@ -38,24 +6,21 @@ const bgPresets = {
     componentAlpha: 220, componentPixels: 5000, componentPad: 2, objectPad: 12,
     cropTransparent: false, decontaminate: true, tone: "dark",
     edgeCleanupStrength: 80, strongBorderRepair: true, preserveColor: true, secondPass: false,
-    aiConfidence: 72, aiMatte: 68, aiSpill: 62, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0,
-    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 1.0, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+    aiConfidence: 72, aiMatte: 68, aiSpill: 62, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0
   },
   "dark-soft": {
     threshold: 14, softness: 34, alphaFloor: 4, alphaCeiling: 245,
     componentAlpha: 200, componentPixels: 5000, componentPad: 4, objectPad: 16,
     cropTransparent: false, decontaminate: true, tone: "dark",
     edgeCleanupStrength: 45, strongBorderRepair: false, preserveColor: true, secondPass: false,
-    aiConfidence: 68, aiMatte: 72, aiSpill: 55, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1,
-    comfyui: { model: "RMBG-2.0", mask_blur: 1, mask_offset: 0, sensitivity: 0.95, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+    aiConfidence: 68, aiMatte: 72, aiSpill: 55, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1
   },
   "dark-hard": {
     threshold: 24, softness: 16, alphaFloor: 12, alphaCeiling: 238,
     componentAlpha: 228, componentPixels: 7000, componentPad: 2, objectPad: 10,
     cropTransparent: false, decontaminate: true, tone: "dark",
     edgeCleanupStrength: 80, strongBorderRepair: false, preserveColor: false, secondPass: true,
-    aiConfidence: 78, aiMatte: 62, aiSpill: 70, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0,
-    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 1.0, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+    aiConfidence: 78, aiMatte: 62, aiSpill: 70, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0
   },
   // Light background presets (UI sheets with white/light grey backgrounds)
   // Production-tested 2026-03-29: IoU=0.997, SSIM=0.994, MAE=0.60
@@ -64,37 +29,23 @@ const bgPresets = {
     componentAlpha: 220, componentPixels: 5000, componentPad: 2, objectPad: 12,
     cropTransparent: false, decontaminate: true, tone: "light",
     edgeCleanupStrength: 80, strongBorderRepair: true, preserveColor: true, secondPass: false,
-    aiConfidence: 72, aiMatte: 68, aiSpill: 45, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0,
-    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 0.95, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+    aiConfidence: 72, aiMatte: 68, aiSpill: 45, aiInvertMask: false, aiMaskExpand: 0, aiMaskFeather: 0
   },
   "light-soft": {
     threshold: 10, softness: 28, alphaFloor: 2, alphaCeiling: 248,
     componentAlpha: 200, componentPixels: 4000, componentPad: 4, objectPad: 16,
     cropTransparent: false, decontaminate: true, tone: "light",
     edgeCleanupStrength: 40, strongBorderRepair: false, preserveColor: true, secondPass: false,
-    aiConfidence: 66, aiMatte: 72, aiSpill: 35, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1,
-    comfyui: { model: "RMBG-2.0", mask_blur: 1, mask_offset: 0, sensitivity: 0.90, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+    aiConfidence: 66, aiMatte: 72, aiSpill: 35, aiInvertMask: false, aiMaskExpand: 1, aiMaskFeather: 1
   },
   "light-hard": {
     threshold: 16, softness: 14, alphaFloor: 10, alphaCeiling: 242,
     componentAlpha: 228, componentPixels: 6000, componentPad: 2, objectPad: 10,
     cropTransparent: false, decontaminate: true, tone: "light",
     edgeCleanupStrength: 80, strongBorderRepair: true, preserveColor: false, secondPass: true,
-    aiConfidence: 78, aiMatte: 62, aiSpill: 55, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0,
-    comfyui: { model: "RMBG-2.0", mask_blur: 0, mask_offset: 0, sensitivity: 1.0, process_res: 1024, invert_output: false, refine_foreground: false, background: "Alpha" }
+    aiConfidence: 78, aiMatte: 62, aiSpill: 55, aiInvertMask: false, aiMaskExpand: -1, aiMaskFeather: 0
   }
 };
-
-const form = document.querySelector("#workflowForm");
-const installList = document.querySelector("#installList");
-const stepsList = document.querySelector("#stepsList");
-const positivePrompt = document.querySelector("#positivePrompt");
-const negativePrompt = document.querySelector("#negativePrompt");
-const workflowJson = document.querySelector("#workflowJson");
-const copyJsonButton = document.querySelector("#copyJsonButton");
-const downloadJsonButton = document.querySelector("#downloadJsonButton");
-const loadDemoButton = document.querySelector("#loadDemoButton");
-const copyChecklistButton = document.querySelector("#copyChecklistButton");
 
 const bgInputFile = document.querySelector("#bgInputFile");
 const bgMode = document.querySelector("#bgMode");
@@ -186,16 +137,10 @@ const batchCurrentFile = document.querySelector("#batchCurrentFile");
 const batchProgressBar = document.querySelector("#batchProgressBar");
 const batchAiSource = document.querySelector("#batchAiSource");
 const batchAiSourceField = document.querySelector("#batchAiSourceField");
-const comfyuiServer = document.querySelector("#comfyuiServer");
-const comfyuiModel = document.querySelector("#comfyuiModel");
-const comfyuiConnectButton = document.querySelector("#comfyuiConnectButton");
-const comfyuiGenerateMaskButton = document.querySelector("#comfyuiGenerateMaskButton");
-const comfyuiStatus = document.querySelector("#comfyuiStatus");
 const browserMaskButton = document.querySelector("#browserMaskButton");
 const browserMaskStatus = document.querySelector("#browserMaskStatus");
 const aiRemoveButton = document.querySelector("#aiRemoveButton");
 const aiRemoveStatus = document.querySelector("#aiRemoveStatus");
-const comfyuiDot = document.querySelector("#comfyuiDot");
 const aiEnhanceBlock = document.querySelector("#aiEnhanceBlock");
 const aiEnhanceButton = document.querySelector("#aiEnhanceButton");
 const aiEnhanceStatus = document.querySelector("#aiEnhanceStatus");
@@ -221,7 +166,6 @@ const aiSpillValue = document.querySelector("#aiSpillValue");
 const aiMaskExpandValue = document.querySelector("#aiMaskExpandValue");
 const aiMaskFeatherValue = document.querySelector("#aiMaskFeatherValue");
 
-let currentPayload = null;
 let loadedImage = null;
 let loadedFileName = "asset";
 let processedCanvas = null;
@@ -232,7 +176,6 @@ let manualMaskCanvas = null;
 let aiMaskCanvas = null;
 let importedAiMaskAlpha = null;
 let importedAiMaskIsInternal = false; // true when mask is from internal detection (has soft edges)
-let comfyuiConnected = false;
 let onnxSession = null;
 let onnxModelLoading = false;
 let manualBackgroundColor = null;
