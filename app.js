@@ -2021,8 +2021,9 @@ async function aiRemoveWorkflow() {
   try {
     // Build source canvas for analysis
     const sourceCanvas = createCanvas(loadedImage.width, loadedImage.height);
-    sourceCanvas.getContext("2d").drawImage(loadedImage, 0, 0);
-    const sourceData = sourceCanvas.getContext("2d").getImageData(0, 0, loadedImage.width, loadedImage.height);
+    const sourceCtx = sourceCanvas.getContext("2d");
+    sourceCtx.drawImage(loadedImage, 0, 0);
+    const sourceData = sourceCtx.getImageData(0, 0, loadedImage.width, loadedImage.height);
     const currentTone = bgTone ? bgTone.value : "dark";
 
     // Step 1: Run JS v5+ pipeline (proven detection that works)
@@ -2040,15 +2041,9 @@ async function aiRemoveWorkflow() {
 
     // Step 2: Send to Python for multi-spectrum cleanup (removes artifacts + border color spill)
     try {
-      const canvasTmp = document.createElement('canvas');
-      canvasTmp.width = loadedImage.width;
-      canvasTmp.height = loadedImage.height;
-      canvasTmp.getContext('2d').drawImage(loadedImage, 0, 0);
-      const imgB64 = canvasTmp.toDataURL('image/png').split(',')[1];
+      const imgB64 = sourceCanvas.toDataURL('image/png').split(',')[1];
       // Encode the v5+ mask as a grayscale PNG
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = loadedImage.width;
-      maskCanvas.height = loadedImage.height;
+      const maskCanvas = createCanvas(loadedImage.width, loadedImage.height);
       const maskCtx = maskCanvas.getContext('2d');
       const maskImgData = maskCtx.createImageData(loadedImage.width, loadedImage.height);
       for (let i = 0; i < hybridAlpha.length; i++) {
@@ -2076,9 +2071,7 @@ async function aiRemoveWorkflow() {
             cleanImg.onerror = reject;
             cleanImg.src = 'data:image/png;base64,' + result.cleaned_mask;
           });
-          const cleanCanvas = document.createElement('canvas');
-          cleanCanvas.width = loadedImage.width;
-          cleanCanvas.height = loadedImage.height;
+          const cleanCanvas = createCanvas(loadedImage.width, loadedImage.height);
           const cleanCtx = cleanCanvas.getContext('2d');
           cleanCtx.drawImage(cleanImg, 0, 0);
           const cleanData = cleanCtx.getImageData(0, 0, loadedImage.width, loadedImage.height);
@@ -2101,9 +2094,8 @@ async function aiRemoveWorkflow() {
     // Store as imported AI mask so the rest of the pipeline works
     importedAiMaskAlpha = hybridAlpha;
     importedAiMaskIsInternal = !usedStructural; // only skip binarization for border mask (has soft edges)
-    rebuildImportedAiMaskCanvas();
 
-    // Set mode to AI with imported mask
+    // Set mode to AI with imported mask BEFORE rebuilding so we refine with correct settings
     if (bgMode) { bgMode.value = "ai"; bgMode.dispatchEvent(new Event("change")); }
     if (bgMaskSource) { bgMaskSource.value = "ai"; bgMaskSource.dispatchEvent(new Event("change")); }
     if (bgDecontaminate) bgDecontaminate.checked = true;
@@ -2111,10 +2103,13 @@ async function aiRemoveWorkflow() {
     if (bgAiMaskExpand) bgAiMaskExpand.value = 0;
     if (bgAiMaskFeather) bgAiMaskFeather.value = 0;
 
-    // Validate coverage
-    const testSettings = getBgSettings();
-    const testAlpha = getRefinedImportedAiAlpha(testSettings);
-    const coverage = testAlpha ? getAlphaCoverage(testAlpha) : 0;
+    // Single getRefinedImportedAiAlpha call: build mask canvas + validate coverage
+    const refined = getRefinedImportedAiAlpha();
+    if (!refined) {
+      throw new Error("No UI regions detected. Try adjusting the background tone or using manual tools.");
+    }
+    aiMaskCanvas = createMaskCanvasFromAlpha(refined, loadedImage.width, loadedImage.height);
+    const coverage = getAlphaCoverage(refined);
     if (coverage < 0.005) {
       throw new Error("No UI regions detected. Try adjusting the background tone or using manual tools.");
     }
@@ -5253,9 +5248,10 @@ async function processBackgroundImage() {
     sourceCtx.drawImage(loadedImage, 0, 0);
     const sourceData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
     const backgroundSamples = getBackgroundSamples(settings, sourceData);
-    const aiCoverage = settings.mode === "ai" && settings.maskSource === "ai"
-      ? getAlphaCoverage(getRefinedImportedAiAlpha(settings))
+    const refinedAiAlpha = settings.mode === "ai" && settings.maskSource === "ai"
+      ? getRefinedImportedAiAlpha(settings)
       : null;
+    const aiCoverage = refinedAiAlpha ? getAlphaCoverage(refinedAiAlpha) : null;
     if (settings.mode === "ai" && settings.maskSource === "ai" && (aiCoverage === null || aiCoverage < 0.001)) {
       bgStatus.textContent = "The imported AI mask is effectively empty after the current settings. Try turning off Invert, lowering Feather, or loading a different matte.";
       setProcessingState(false);
@@ -5268,7 +5264,7 @@ async function processBackgroundImage() {
         ? buildProcessedBackgroundFromAlpha(
             sourceCanvas,
             sourceData,
-            getRefinedImportedAiAlpha(settings) || alphaFromMaskCanvas(aiMaskCanvas),
+            refinedAiAlpha || alphaFromMaskCanvas(aiMaskCanvas),
             {
               ...settings,
               mode: "remove",
