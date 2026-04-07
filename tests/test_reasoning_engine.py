@@ -57,11 +57,29 @@ def test_unknown_provider_falls_back_to_stub():
     assert engine.provider_name == "stub"
 
 
-def test_anthropic_falls_back_to_stub_without_api_key(monkeypatch):
-    """Without ANTHROPIC_API_KEY set, the anthropic provider should
+def test_anthropic_falls_back_to_stub_without_api_key(monkeypatch, tmp_path):
+    """Without any Anthropic credential, the anthropic provider should
     raise ProviderUnavailable on construction and the engine should
-    silently fall back to the stub."""
+    silently fall back to the stub.
+
+    The provider checks two sources in priority order:
+      1. ~/.claude/.credentials.json (Claude Code OAuth token, rotates)
+      2. ANTHROPIC_API_KEY env var (stable billing key)
+
+    Both must be absent for this test, so we monkeypatch HOME to a fresh
+    tmp_path so the credentials file doesn't exist there.
+    """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Path.home() on Windows
+    # Path.home() caches its result via os.path.expanduser; reload the
+    # module-level constant the provider holds.
+    import importlib
+
+    from director_hub.reasoning.providers import anthropic as anthropic_provider
+
+    importlib.reload(anthropic_provider)
+
     engine = ReasoningEngine(
         config={"active": "anthropic", "providers": [{"name": "anthropic"}]}
     )

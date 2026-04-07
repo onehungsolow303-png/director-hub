@@ -30,9 +30,55 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Claude Code stores its OAuth tokens here. The accessToken field rotates
+# every few hours via Claude Code's refresh flow. We re-read this file at
+# every interpret() call so the provider self-heals when Claude Code
+# refreshes — no manual env var rotation needed for users on Claude Max.
+_CLAUDE_CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
+
+
+def _load_token_from_credentials_file() -> str | None:
+    """Read the current Claude Code OAuth access token from disk.
+
+    Returns None if the file is missing, malformed, or doesn't contain
+    an OAuth section. Callers should fall back to the ANTHROPIC_API_KEY
+    environment variable in that case.
+    """
+    if not _CLAUDE_CREDENTIALS_PATH.exists():
+        return None
+    try:
+        data = json.loads(_CLAUDE_CREDENTIALS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
+    if not isinstance(oauth, dict):
+        return None
+    token = oauth.get("accessToken")
+    return token if isinstance(token, str) and token else None
+
+
+def _resolve_anthropic_key() -> str | None:
+    """Return the freshest available Anthropic credential.
+
+    Priority:
+      1. Claude Code's rotating OAuth token at ~/.claude/.credentials.json
+         (re-read on every call so it picks up Claude Code refreshes)
+      2. ANTHROPIC_API_KEY environment variable
+         (typically set to a stable billing key from console.anthropic.com)
+
+    The OAuth path is preferred when present because it's typically the
+    most recently rotated. Production deployments should set the env var
+    to a real billing key — that path is stable and CI-friendly.
+    """
+    fresh = _load_token_from_credentials_file()
+    if fresh:
+        return fresh
+    return os.environ.get("ANTHROPIC_API_KEY")
 
 from director_hub.toolbelt.asset_tool import AssetTool
 from director_hub.toolbelt.dice_tool import DiceTool
@@ -96,8 +142,12 @@ Workflow:
 
      `stat` must be one of "hp", "attack", "defense", "status".
 
-The final response MUST be ONLY the JSON object — no surrounding prose,
-no code fences. Do NOT invent stat values; only suggest deltas.
+CRITICAL OUTPUT FORMAT:
+  - Your final message must contain a JSON object matching the schema above.
+  - Do NOT add prose explanations before or after the JSON ("Here's the
+    result:", "I'll construct a scene:", etc.). The parser will accept
+    code-fenced JSON if you must, but bare JSON is preferred.
+  - Do NOT invent stat values; only suggest deltas in stat_effects.
 """
 
 
@@ -118,15 +168,16 @@ class AnthropicProvider(ReasoningProvider):
                 'Run `pip install -e ".[anthropic]"` to enable this provider.'
             ) from e
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = _resolve_anthropic_key()
         if not api_key:
             raise ProviderUnavailable(
-                "ANTHROPIC_API_KEY environment variable is not set. "
-                "Set it before starting Director Hub to enable the Claude provider."
+                "No Anthropic credential available. Either set ANTHROPIC_API_KEY "
+                "or sign in to Claude Code so ~/.claude/.credentials.json exists."
             )
 
         self._anthropic = anthropic
         self._client = anthropic.Anthropic(api_key=api_key)
+        self._current_key = api_key
         self._model = model
         self._max_tokens = max_tokens
         self._max_tool_iterations = max_tool_iterations
@@ -147,6 +198,13 @@ class AnthropicProvider(ReasoningProvider):
         # is unreachable. Cache key is session_id.
         remember_request(action_request)
         session_id = action_request.get("session_id", "")
+
+        # Refresh the API key from disk on every call. Claude Code rotates
+        # OAuth tokens every few hours; re-reading the credentials file
+        # picks up the latest without requiring a Director Hub restart or
+        # manual env var update. Cheap (~1 file read), and only takes
+        # effect when the token actually changed.
+        self._refresh_client_if_token_rotated()
 
         user_payload = json.dumps(
             {
@@ -196,6 +254,21 @@ class AnthropicProvider(ReasoningProvider):
         )
 
     # ------------------------------------------------------------------ helpers
+
+    def _refresh_client_if_token_rotated(self) -> None:
+        """Re-read the API key from disk; rebuild the client if it changed.
+
+        Cheap no-op when the token hasn't rotated. When Claude Code refreshes
+        its OAuth token (every few hours), this picks up the new value on the
+        next request automatically — no Director Hub restart required.
+        """
+        latest = _resolve_anthropic_key()
+        if latest and latest != self._current_key:
+            logger.warning(
+                "[AnthropicProvider] credential rotated, rebuilding client"
+            )
+            self._client = self._anthropic.Anthropic(api_key=latest)
+            self._current_key = latest
 
     def _dispatch_tools(self, response: Any, session_id: str) -> list[dict[str, Any]]:
         """Execute every tool_use block in the response and return a list of
@@ -251,22 +324,21 @@ class AnthropicProvider(ReasoningProvider):
 
     def _parse_final(self, response: Any, action_request: dict[str, Any]) -> dict[str, Any]:
         """Extract the final assistant text, parse as JSON, apply defensive
-        defaults, return the inner-shape dict the engine wraps."""
+        defaults, return the inner-shape dict the engine wraps.
+
+        Defensive against three common LLM response shapes:
+          1. Bare JSON: {"success": true, ...}
+          2. Code-fenced: ```json\n{...}\n```
+          3. Prose-wrapped: "Here's the result:\n\n```json\n{...}\n```\n"
+        """
         text_parts = [block.text for block in response.content if hasattr(block, "text")]
         raw = "".join(text_parts).strip()
 
-        # Strip optional code-fence wrapping
-        if raw.startswith("```"):
-            raw = raw.strip("`")
-            if raw.startswith("json"):
-                raw = raw[4:].strip()
-
-        try:
-            decision = json.loads(raw)
-        except json.JSONDecodeError as e:
+        decision = _extract_json_object(raw)
+        if decision is None:
             raise ProviderUnavailable(
-                f"Anthropic final response was not valid JSON: {e}. Raw: {raw!r}"
-            ) from e
+                f"Anthropic final response had no parseable JSON object. Raw: {raw!r}"
+            )
 
         # Defensive defaults — the model may omit optional fields
         decision.setdefault("success", True)
@@ -276,6 +348,57 @@ class AnthropicProvider(ReasoningProvider):
         decision.setdefault("fx_requests", [])
         decision.setdefault("repetition_penalty", 0)
         return decision
+
+
+def _extract_json_object(raw: str) -> dict[str, Any] | None:
+    """Find the first balanced JSON object in `raw` and parse it.
+
+    Handles three response shapes the LLM produces:
+      1. Bare object: '{"a":1}'
+      2. Fenced: '```json\\n{"a":1}\\n```'
+      3. Prose-wrapped: 'Here you go:\\n\\n```json\\n{"a":1}\\n```\\nDone.'
+
+    Strategy: scan for the first '{', then walk forward tracking brace
+    depth (with string-state awareness so braces inside strings don't
+    confuse the count) until depth returns to zero. Try json.loads on
+    the resulting substring. Returns None if no balanced object is found
+    or if the substring doesn't parse.
+    """
+    if not raw:
+        return None
+
+    start = raw.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(raw)):
+        ch = raw[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = raw[start : i + 1]
+                try:
+                    parsed = json.loads(candidate)
+                except json.JSONDecodeError:
+                    return None
+                return parsed if isinstance(parsed, dict) else None
+    return None
 
 
 def _build_tool_schemas() -> list[dict[str, Any]]:
