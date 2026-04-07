@@ -39,7 +39,13 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["_archive", ".venv", "build", "dist"]
+extend-exclude = [
+    "_archive",
+    ".venv",
+    "build",
+    "dist",
+    "director_hub/bridge/_generated_schemas.py",  # auto-generated, do not lint
+]
 
 [tool.ruff.lint]
 select = [
