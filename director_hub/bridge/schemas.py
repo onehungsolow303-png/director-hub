@@ -1,75 +1,42 @@
-"""Pydantic models matching .shared/schemas/.
+"""Pydantic models for the Director Hub HTTP bridge.
 
-Hand-written for Phase 1 to avoid import-path coupling to .shared/codegen.
-The goldens in .shared/codegen/golden_python.py are the contract; these
-models follow that contract field-for-field.
+The schema-backed classes (`ActionRequest`, `DecisionPayload`) are imported
+from the generated module that mirrors `C:/Dev/.shared/schemas/`. The two
+session lifecycle wrappers (`SessionStartRequest`, `SessionStartResponse`)
+are Director Hub-internal — they have no entry in `.shared/schemas/` because
+no other service consumes them — so they stay hand-written here.
 
-Phase 1 hardening (post-review fixes 1+2):
-- All models pin extra="forbid" to mirror additionalProperties:false in
-  the JSON schemas (rejects unknown fields with HTTP 422 instead of
-  silently swallowing them).
-- schema_version is Literal["1.0.0"] to mirror the JSON schema const
-  (rejects version mismatches at the boundary instead of accepting and
-  silently re-emitting "1.0.0").
+Hardening for the schema-backed classes (extra="forbid", Literal const
+pinning) is applied centrally by `.shared/codegen/python_gen.py`. Hardening
+for the local wrappers is applied here for consistency.
 
-Numeric/length constraints (Field(ge=, le=, min_length=, max_length=))
-and nested ActorStats class are deferred to a follow-up; the runtime
-jsonschema.validate() against .shared/schemas/ remains the source of
-truth per spec §7.
+Update flow when contracts change:
+  1. Edit the JSON schema in C:/Dev/.shared/schemas/
+  2. cd C:/Dev/.shared && python codegen/python_gen.py --out codegen/golden_python.py
+  3. cp C:/Dev/.shared/codegen/golden_python.py C:/Dev/Director Hub/director_hub/bridge/_generated_schemas.py
+  4. Run pytest tests/
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-
-class ActionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal["1.0.0"] = "1.0.0"
-    session_id: str
-    actor_id: str
-    target_id: Optional[str] = None
-    player_input: str
-    actor_stats: dict[str, Any]
-    target_stats: Optional[dict[str, Any]] = None
-    scene_context: Optional[dict[str, Any]] = None
-    recent_history: Optional[list[str]] = None
-
-
-class StatEffect(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    target_id: str
-    stat: str
-    delta: int
-    status_effect: Optional[str] = None
-
-
-class FxRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: str
-    biome: Optional[str] = None
-    theme: Optional[str] = None
-
-
-class DecisionPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal["1.0.0"] = "1.0.0"
-    session_id: str
-    success: bool
-    scale: int
-    narrative_text: str
-    stat_effects: list[StatEffect] = Field(default_factory=list)
-    fx_requests: list[FxRequest] = Field(default_factory=list)
-    repetition_penalty: int = 0
-    deterministic_fallback: bool = False
+# Re-export the schema-backed classes under the names callers already use.
+# These are the SOURCE OF TRUTH — never redefine them locally.
+from director_hub.bridge._generated_schemas import (  # noqa: F401
+    ActionRequest,
+    DecisionPayload,
+)
 
 
 class SessionStartRequest(BaseModel):
+    """Director Hub-internal: opens a new session.
+
+    Not in .shared/schemas/ because no other service produces or consumes
+    this exact shape — it's the local handshake at /session/start.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["1.0.0"] = "1.0.0"
@@ -78,6 +45,8 @@ class SessionStartRequest(BaseModel):
 
 
 class SessionStartResponse(BaseModel):
+    """Director Hub-internal: response to /session/start."""
+
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["1.0.0"] = "1.0.0"
