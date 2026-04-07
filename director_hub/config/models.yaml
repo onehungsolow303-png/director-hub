@@ -1,10 +1,27 @@
-# LLM provider configuration. Real provider selection is a follow-up
-# (spec §14 follow-up #2). This file exists so the reasoning engine
-# has a place to read provider metadata from when it's wired up.
+# Director Hub LLM provider configuration.
+#
+# The ReasoningEngine reads `active` and looks up the matching entry in
+# `providers`. If the active provider can't be initialized (missing SDK,
+# missing API key, network error during construction), the engine logs a
+# warning and falls back to the deterministic stub. The bridge always
+# returns a well-formed DecisionPayload either way.
+#
+# Setting active to anthropic in production: install the SDK and export
+# your key:
+#
+#     pip install -e ".[anthropic]"
+#     export ANTHROPIC_API_KEY=sk-ant-...
+#
+# Then change `active` below from `stub` to `anthropic` and restart uvicorn.
 
 providers:
   - name: stub
     type: deterministic
-    notes: "Default for Phase 1 of the pivot - no real LLM call"
+    notes: "Default. Returns a canned DecisionPayload for any input. Always works, no credentials needed."
+
+  - name: anthropic
+    model: claude-sonnet-4-5
+    max_tokens: 1024
+    notes: "Anthropic Claude. Requires `pip install -e .[anthropic]` and ANTHROPIC_API_KEY env var."
 
 active: stub
