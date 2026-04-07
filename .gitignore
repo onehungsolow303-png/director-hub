@@ -10,3 +10,6 @@ dist/
 state/
 traces/
 *.log
+
+# Superpowers brainstorm session state
+.superpowers/
