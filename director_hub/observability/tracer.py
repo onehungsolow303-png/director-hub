@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +65,7 @@ class Tracer:
 
         File path: traces_root/YYYY-MM-DD/spans.jsonl
         """
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         dir_path = self._traces_root / today
         dir_path.mkdir(parents=True, exist_ok=True)
         out_file = dir_path / "spans.jsonl"

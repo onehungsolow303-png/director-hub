@@ -86,7 +86,7 @@ class _ChromaBackend:
         out: list[dict[str, Any]] = []
         docs = (results.get("documents") or [[]])[0]
         metas = (results.get("metadatas") or [[]])[0]
-        for text, meta in zip(docs, metas):
+        for text, meta in zip(docs, metas, strict=False):
             entry = {"text": text}
             if meta:
                 entry.update(meta)

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,7 @@ class EpisodicMemory:
     def record(self, event: dict[str, Any]) -> None:
         if "timestamp" not in event:
             event = dict(event)
-            event["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            event["timestamp"] = datetime.now(UTC).isoformat(timespec="seconds")
         self._events.append(event)
         if self._persist:
             session_id = str(event.get("session_id", "no-session"))

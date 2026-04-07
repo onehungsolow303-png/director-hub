@@ -7,7 +7,7 @@ captures structured journal lines for use within a single reasoning loop.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .base import Tool
@@ -26,7 +26,7 @@ class NarrativeTool(Tool):
             text = kwargs.get("text", "")
             actor = kwargs.get("actor", "system")
             entry = {
-                "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
                 "actor": actor,
                 "text": text,
             }

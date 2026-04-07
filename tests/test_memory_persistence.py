@@ -12,7 +12,6 @@ from director_hub.memory.episodic import EpisodicMemory
 from director_hub.memory.manager import MemoryManager
 from director_hub.memory.semantic import SemanticMemory
 
-
 # ---------------------------------------------------------------- EpisodicMemory
 
 
@@ -32,7 +31,7 @@ def test_episodic_records_in_memory_and_to_disk(tmp_path: Path):
     assert s2_file.exists()
     s1_lines = s1_file.read_text(encoding="utf-8").strip().splitlines()
     assert len(s1_lines) == 2
-    parsed = [json.loads(l) for l in s1_lines]
+    parsed = [json.loads(line) for line in s1_lines]
     assert parsed[0]["kind"] == "combat_start"
     assert parsed[1]["kind"] == "kill"
 

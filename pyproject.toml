@@ -19,6 +19,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "ruff>=0.5",
 ]
 anthropic = [
     "anthropic>=0.40",
@@ -34,3 +35,25 @@ exclude = ["tests*", "_archive*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["_archive", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort (import sorting)
+    "B",   # flake8-bugbear (likely bugs)
+    "UP",  # pyupgrade (modern syntax)
+]
+ignore = [
+    "E501",  # line too long — already enforced by line-length but allow long URLs/strings
+    "B008",  # function call in default arg — needed for FastAPI Depends-style patterns
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401"]  # tests intentionally import-and-not-use sometimes
