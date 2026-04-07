@@ -39,10 +39,18 @@ To enable the real Claude provider:
 
 ```bash
 pip install -e ".[anthropic]"
-export ANTHROPIC_API_KEY=sk-ant-...
-# Edit director_hub/config/models.yaml: change `active: stub` to `active: anthropic`
+# director_hub/config/models.yaml ships with `active: anthropic` already
 uvicorn director_hub.bridge.server:app --port 7802
 ```
+
+The Anthropic provider resolves credentials in this priority order:
+
+1. **`~/.claude/.credentials.json`** — Claude Code's OAuth token. Re-read on every request, so when Claude Code rotates the token (every few hours via its refresh flow), Director Hub picks it up automatically without a restart. Free for Claude Max subscribers.
+2. **`ANTHROPIC_API_KEY` env var** — typically a stable billing key from https://console.anthropic.com/settings/keys. Use this in CI / containers / production where you don't have a Claude Code session.
+
+If neither is present, the provider raises `ProviderUnavailable` on construction and the engine silently falls back to the deterministic stub.
+
+The agentic tool-use loop uses the registered toolbelt (`asset_request`, `dice_resolve`, `narrative_write`, `game_state_read`) — see `docs/toolbelt-status.md` for the audit + wire details.
 
 To enable ChromaDB long-term memory (persistent vector store):
 

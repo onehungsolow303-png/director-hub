@@ -12,6 +12,7 @@ spec §14 follow-ups.
 """
 from __future__ import annotations
 
+import time
 import uuid
 
 from fastapi import FastAPI
@@ -23,6 +24,7 @@ from director_hub.bridge.schemas import (
     SessionStartRequest,
     SessionStartResponse,
 )
+from director_hub.observability.request_log import log_request
 from director_hub.reasoning.engine import ReasoningEngine
 from director_hub.toolbelt.game_state_tool import remember_request
 
@@ -48,30 +50,33 @@ def session_start(req: SessionStartRequest) -> SessionStartResponse:
     return SessionStartResponse(session_id=sid, opening=opening)
 
 
+def _interpret_with_logging(endpoint: str, req: ActionRequest) -> DecisionPayload:
+    """Shared body for /interpret_action, /dialogue, /quest.
+
+    All three endpoints take an ActionRequest, run it through the
+    reasoning engine, and emit a structured per-request log line so
+    bad responses can be debugged after the fact (see
+    observability/request_log.py for the schema).
+    """
+    payload = req.model_dump()
+    remember_request(payload)
+    started = time.monotonic()
+    result = _engine.interpret(payload)
+    latency_ms = int((time.monotonic() - started) * 1000)
+    log_request(endpoint, payload, result, latency_ms)
+    return DecisionPayload(**result)
+
+
 @app.post("/interpret_action", response_model=DecisionPayload)
 def interpret_action(req: ActionRequest) -> DecisionPayload:
-    payload = req.model_dump()
-    # Populate the GameStateTool cache so a downstream LLM can read the
-    # latest engine state via game_state_read even if Forever engine's
-    # GameStateServer is unreachable. AnthropicProvider also calls this
-    # internally; doing it here too means the stub provider populates
-    # the cache (useful for tests + offline replay).
-    remember_request(payload)
-    result = _engine.interpret(payload)
-    return DecisionPayload(**result)
+    return _interpret_with_logging("/interpret_action", req)
 
 
 @app.post("/dialogue", response_model=DecisionPayload)
 def dialogue(req: ActionRequest) -> DecisionPayload:
-    payload = req.model_dump()
-    remember_request(payload)
-    result = _engine.interpret(payload)
-    return DecisionPayload(**result)
+    return _interpret_with_logging("/dialogue", req)
 
 
 @app.post("/quest", response_model=DecisionPayload)
 def quest(req: ActionRequest) -> DecisionPayload:
-    payload = req.model_dump()
-    remember_request(payload)
-    result = _engine.interpret(payload)
-    return DecisionPayload(**result)
+    return _interpret_with_logging("/quest", req)
