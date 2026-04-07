@@ -44,7 +44,12 @@ class AssetTool(Tool):
         try:
             with httpx.Client(timeout=self._timeout) as client:
                 resp = client.post(f"{self._base_url}/select", json=payload)
-        except httpx.RequestError as e:
+        except Exception as e:
+            # Boundary: catch any transport-level error and degrade gracefully.
+            # Windows wraps connection-refused as httpx.ConnectTimeout (subclass
+            # of httpx.RequestError); Linux can surface httpcore.ConnectError
+            # directly without httpx wrapping in some httpx/httpcore version
+            # combinations. Catching Exception covers both without pinning deps.
             return {
                 "ok": False,
                 "found": False,

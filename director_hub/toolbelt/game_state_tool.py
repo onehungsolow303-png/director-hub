@@ -72,8 +72,10 @@ class GameStateTool(Tool):
                 live = resp.json()
                 live["source"] = "live"
                 return {"ok": True, "found": True, "snapshot": live}
-        except httpx.RequestError:
-            pass  # fall through to cache
+        except Exception:
+            # Boundary: catch any transport error and fall through to the
+            # cache. See asset_tool.py for the rationale on the broad catch.
+            pass
 
         # 2. Fall back to the cache
         if not session_id:
