@@ -20,8 +20,8 @@ providers:
     notes: "Default. Returns a canned DecisionPayload for any input. Always works, no credentials needed."
 
   - name: anthropic
-    model: claude-sonnet-4-5
+    model: claude-haiku-4-5
     max_tokens: 1024
-    notes: "Anthropic Claude. Requires `pip install -e .[anthropic]` and ANTHROPIC_API_KEY env var."
+    notes: "Anthropic Claude. Requires `pip install -e .[anthropic]` and ANTHROPIC_API_KEY env var. Haiku chosen for low-latency in-game responses + higher rate limits than Sonnet."
 
-active: stub
+active: anthropic
