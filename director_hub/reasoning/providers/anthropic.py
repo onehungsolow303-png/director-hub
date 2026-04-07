@@ -148,6 +148,15 @@ CRITICAL OUTPUT FORMAT:
     result:", "I'll construct a scene:", etc.). The parser will accept
     code-fenced JSON if you must, but bare JSON is preferred.
   - Do NOT invent stat values; only suggest deltas in stat_effects.
+  - **NEVER ask the player for clarification.** If the scene context is
+    sparse or empty, INVENT a reasonable scene that fits the player's
+    action and proceed. The player cannot answer follow-up questions —
+    your output goes straight to the game's UI as a single response.
+    A made-up scene that lets the action resolve is always better than
+    a meta-comment asking for more information.
+  - If you absolutely cannot resolve the action (e.g., the player input
+    is empty or nonsensical), still emit valid JSON with success=false,
+    a low scale, and a narrative explaining what was confusing.
 """
 
 
@@ -326,19 +335,36 @@ class AnthropicProvider(ReasoningProvider):
         """Extract the final assistant text, parse as JSON, apply defensive
         defaults, return the inner-shape dict the engine wraps.
 
-        Defensive against three common LLM response shapes:
+        Defensive against four common LLM response shapes:
           1. Bare JSON: {"success": true, ...}
           2. Code-fenced: ```json\n{...}\n```
           3. Prose-wrapped: "Here's the result:\n\n```json\n{...}\n```\n"
+          4. Pure prose (LLM ignored format instructions): wrap the prose
+             as narrative_text with safe defaults so the player still
+             sees something instead of getting a stub fallback.
         """
         text_parts = [block.text for block in response.content if hasattr(block, "text")]
         raw = "".join(text_parts).strip()
 
         decision = _extract_json_object(raw)
         if decision is None:
-            raise ProviderUnavailable(
-                f"Anthropic final response had no parseable JSON object. Raw: {raw!r}"
+            # LLM ignored the format instructions and returned prose. Salvage
+            # by wrapping the prose as the narrative. This is a degraded
+            # response (no stat_effects, no fx_requests, default scale) but
+            # it's strictly better than falling back to "[stub]" text.
+            logger.warning(
+                "[AnthropicProvider] no JSON in final response; salvaging prose as narrative_text"
             )
+            # Trim to 4000 chars to satisfy decision.schema.json's maxLength
+            narrative = raw[:4000] if len(raw) > 4000 else raw
+            return {
+                "success": True,
+                "scale": 5,
+                "narrative_text": narrative,
+                "stat_effects": [],
+                "fx_requests": [],
+                "repetition_penalty": 0,
+            }
 
         # Defensive defaults — the model may omit optional fields
         decision.setdefault("success", True)
