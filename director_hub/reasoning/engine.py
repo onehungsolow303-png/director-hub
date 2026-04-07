@@ -51,6 +51,12 @@ class ReasoningEngine:
         return self._provider.is_real
 
     def interpret(self, action_request: dict[str, Any]) -> dict[str, Any]:
+        # Track per-call so deterministic_fallback reflects THIS response's
+        # source, not the engine's configured provider. If a real provider
+        # is configured but its request raises, the inner data comes from
+        # the stub fallback below and this flag flips true for that
+        # response only.
+        used_fallback = not self._provider.is_real
         try:
             inner = self._provider.interpret(action_request)
         except Exception as e:  # boundary - fall back to stub on any provider error
@@ -59,6 +65,7 @@ class ReasoningEngine:
                 "Falling back to stub for this request."
             )
             inner = StubProvider().interpret(action_request)
+            used_fallback = True
             self._provider_failed_once = True
 
         return {
@@ -70,7 +77,7 @@ class ReasoningEngine:
             "stat_effects": inner.get("stat_effects") or [],
             "fx_requests": inner.get("fx_requests") or [],
             "repetition_penalty": int(inner.get("repetition_penalty", 0)),
-            "deterministic_fallback": not self._provider.is_real,
+            "deterministic_fallback": used_fallback,
         }
 
 
