@@ -1,0 +1,25 @@
+{
+  "id": "05_repetition_penalty",
+  "category": "creativity",
+  "description": "Player repeats the same generic 'I attack' input five times in recent_history. The reasoning engine should signal a non-zero repetition_penalty when it lands.",
+  "input": {
+    "schema_version": "1.0.0",
+    "session_id": "eval-05",
+    "actor_id": "player",
+    "target_id": "goblin_01",
+    "player_input": "I attack",
+    "actor_stats": {"hp": 18, "max_hp": 20, "attack": 5},
+    "target_stats": {"hp": 6, "max_hp": 8},
+    "scene_context": {"biome": "forest"},
+    "recent_history": [
+      "I attack", "I attack", "I attack", "I attack", "I attack"
+    ]
+  },
+  "expectations": {
+    "scale_min": 1,
+    "scale_max": 10,
+    "narrative_min_length": 1,
+    "preferred_repetition_penalty_min": 1,
+    "_note": "Phase 1 stub returns repetition_penalty=0 for everything; this expectation activates once the real reasoning engine lands."
+  }
+}

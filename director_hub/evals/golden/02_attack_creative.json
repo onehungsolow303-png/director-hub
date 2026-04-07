@@ -1,0 +1,22 @@
+{
+  "id": "02_attack_creative",
+  "category": "combat",
+  "description": "Player tries a creative non-mechanical action (sand in eyes). Should resolve with a status_effect, not raw HP damage.",
+  "input": {
+    "schema_version": "1.0.0",
+    "session_id": "eval-02",
+    "actor_id": "player",
+    "target_id": "goblin_01",
+    "player_input": "I throw sand in the goblin's eyes",
+    "actor_stats": {"hp": 20, "max_hp": 20, "attack": 5, "defense": 3, "skills": ["dirty_fighting"]},
+    "target_stats": {"hp": 8, "max_hp": 8},
+    "scene_context": {"biome": "forest", "location": "clearing"}
+  },
+  "expectations": {
+    "scale_min": 1,
+    "scale_max": 10,
+    "narrative_min_length": 1,
+    "preferred_stat_effect_kind": "status",
+    "preferred_status_effect": "blinded"
+  }
+}

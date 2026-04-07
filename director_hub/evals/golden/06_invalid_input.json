@@ -1,0 +1,16 @@
+{
+  "id": "06_invalid_input",
+  "category": "robustness",
+  "description": "Player input is empty whitespace. The boundary should reject the request with HTTP 422 (player_input minLength=1 in the JSON schema).",
+  "input": {
+    "schema_version": "1.0.0",
+    "session_id": "eval-06",
+    "actor_id": "player",
+    "player_input": "   ",
+    "actor_stats": {"hp": 20, "max_hp": 20}
+  },
+  "expectations": {
+    "_note": "Phase 1 pydantic doesn't enforce minLength yet — this passes with a stub narrative today. Once Field(min_length=1) is added, expect 422.",
+    "expected_status": 200
+  }
+}

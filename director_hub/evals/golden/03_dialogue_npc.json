@@ -1,0 +1,21 @@
+{
+  "id": "03_dialogue_npc",
+  "category": "dialogue",
+  "description": "Player asks an NPC for directions to the nearest town. Should resolve as success with a narrative that references the location context.",
+  "input": {
+    "schema_version": "1.0.0",
+    "session_id": "eval-03",
+    "actor_id": "player",
+    "target_id": "innkeeper",
+    "player_input": "Excuse me, where's the nearest town from here?",
+    "actor_stats": {"hp": 20, "max_hp": 20},
+    "scene_context": {"biome": "forest", "location": "wayfarer_inn"}
+  },
+  "expectations": {
+    "success_required": true,
+    "scale_min": 1,
+    "scale_max": 10,
+    "narrative_min_length": 1,
+    "stat_effects_must_be_empty": true
+  }
+}

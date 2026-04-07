@@ -1,0 +1,22 @@
+{
+  "id": "01_attack_basic",
+  "category": "combat",
+  "description": "Player declares a plain attack on a goblin. Should resolve with success and a non-empty narrative.",
+  "input": {
+    "schema_version": "1.0.0",
+    "session_id": "eval-01",
+    "actor_id": "player",
+    "target_id": "goblin_01",
+    "player_input": "I attack the goblin with my sword",
+    "actor_stats": {"hp": 20, "max_hp": 20, "attack": 5, "defense": 3},
+    "target_stats": {"hp": 8, "max_hp": 8, "attack": 3, "defense": 2},
+    "scene_context": {"biome": "forest", "location": "clearing"}
+  },
+  "expectations": {
+    "success_required": true,
+    "scale_min": 1,
+    "scale_max": 10,
+    "narrative_min_length": 1,
+    "narrative_must_not_contain": ["error", "failed to load"]
+  }
+}

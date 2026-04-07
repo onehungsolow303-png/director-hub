@@ -1,0 +1,19 @@
+{
+  "id": "04_resource_check",
+  "category": "exploration",
+  "description": "Player tries to forage for berries. Outcome depends on biome/location. The reasoning engine should produce a narrative describing what they find (or don't).",
+  "input": {
+    "schema_version": "1.0.0",
+    "session_id": "eval-04",
+    "actor_id": "player",
+    "target_id": null,
+    "player_input": "I look around for berries to eat",
+    "actor_stats": {"hp": 12, "max_hp": 20, "skills": ["herbalism"]},
+    "scene_context": {"biome": "forest", "location": "thicket", "time_of_day": "afternoon"}
+  },
+  "expectations": {
+    "scale_min": 1,
+    "scale_max": 10,
+    "narrative_min_length": 1
+  }
+}

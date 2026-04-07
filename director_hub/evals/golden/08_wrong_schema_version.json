@@ -1,0 +1,15 @@
+{
+  "id": "08_wrong_schema_version",
+  "category": "robustness",
+  "description": "schema_version is wrong. Boundary must reject with 422 because action.schema.json has const='1.0.0' and the generated pydantic enforces Literal['1.0.0'].",
+  "input": {
+    "schema_version": "99.99.99",
+    "session_id": "eval-08",
+    "actor_id": "player",
+    "player_input": "I look around",
+    "actor_stats": {"hp": 20, "max_hp": 20}
+  },
+  "expectations": {
+    "expected_status": 422
+  }
+}
