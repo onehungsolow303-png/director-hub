@@ -1,0 +1,10 @@
+# LLM provider configuration. Real provider selection is a follow-up
+# (spec §14 follow-up #2). This file exists so the reasoning engine
+# has a place to read provider metadata from when it's wired up.
+
+providers:
+  - name: stub
+    type: deterministic
+    notes: "Default for Phase 1 of the pivot - no real LLM call"
+
+active: stub

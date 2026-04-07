@@ -1,0 +1,13 @@
+# Eval gate thresholds - used by evals/ci_gate.py to block deploys
+# when key metrics regress.
+
+task_success_rate:
+  baseline: 0.0
+  max_drop: 0.05
+
+latency_ms:
+  baseline: 0
+  max_increase: 100
+
+hallucination_rate:
+  max: 0.05
