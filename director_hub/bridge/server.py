@@ -24,6 +24,7 @@ from director_hub.bridge.schemas import (
     SessionStartResponse,
 )
 from director_hub.reasoning.engine import ReasoningEngine
+from director_hub.toolbelt.game_state_tool import remember_request
 
 app = FastAPI(title="Director Hub", version=__version__)
 _engine = ReasoningEngine()
@@ -49,17 +50,28 @@ def session_start(req: SessionStartRequest) -> SessionStartResponse:
 
 @app.post("/interpret_action", response_model=DecisionPayload)
 def interpret_action(req: ActionRequest) -> DecisionPayload:
-    result = _engine.interpret(req.model_dump())
+    payload = req.model_dump()
+    # Populate the GameStateTool cache so a downstream LLM can read the
+    # latest engine state via game_state_read even if Forever engine's
+    # GameStateServer is unreachable. AnthropicProvider also calls this
+    # internally; doing it here too means the stub provider populates
+    # the cache (useful for tests + offline replay).
+    remember_request(payload)
+    result = _engine.interpret(payload)
     return DecisionPayload(**result)
 
 
 @app.post("/dialogue", response_model=DecisionPayload)
 def dialogue(req: ActionRequest) -> DecisionPayload:
-    result = _engine.interpret(req.model_dump())
+    payload = req.model_dump()
+    remember_request(payload)
+    result = _engine.interpret(payload)
     return DecisionPayload(**result)
 
 
 @app.post("/quest", response_model=DecisionPayload)
 def quest(req: ActionRequest) -> DecisionPayload:
-    result = _engine.interpret(req.model_dump())
+    payload = req.model_dump()
+    remember_request(payload)
+    result = _engine.interpret(payload)
     return DecisionPayload(**result)

@@ -1,6 +1,16 @@
-# Toolbelt status (audit 2026-04-07)
+# Toolbelt status (updated 2026-04-07)
 
 ## TL;DR
+
+**Wired and working.** The `AnthropicProvider` now runs a full tool-use loop using Claude's `tools=[...]` API. All 4 toolbelt entries are registered and dispatchable. The LLM invokes them autonomously when its reasoning needs them, and the loop is bounded at 8 iterations.
+
+**Verified live**: an `/interpret_action` call with `player_input="I crouch and look around carefully"` triggered the LLM to call `dice_resolve(spec='1d20+3', dc=12)` and `narrative_write(action='append', actor='player', text='Crouches low...')` before producing the final JSON. A follow-up call asking "How wounded am I?" triggered `game_state_read({})` and the LLM correctly reported `HP=7` from the cached engine state.
+
+The rest of this document is the original audit (kept for historical context).
+
+---
+
+## Original audit
 
 **The toolbelt module exists but is dead code at runtime.** The 4 well-implemented tools are never invoked by anything in the call graph. The Director Hub LLM is currently doing single-shot prompt → JSON reasoning with no tool access.
 
