@@ -156,12 +156,36 @@ PHYSICAL EFFECTS — when to emit stat_effects:
       3. The NPC you're playing has GRANTED that request in your narrative
          (not refused, not deflected — actually said yes and offered a bed,
          bedroll, room, fire, etc.)
-    Effect to emit:
+    Effect to emit (COPY THIS SHAPE EXACTLY):
       {"target_id": "player", "stat": "hp", "delta": 0,
        "status_effect": "full_rest"}
-    The engine recognizes the "full_rest" status_effect and restores HP,
-    hunger, and thirst to maximum. Use delta:0 because the engine ignores
-    the numeric delta when the status is full_rest.
+
+    HARD RULES — these are non-negotiable, the engine parses on these:
+      - The status_effect string MUST be the literal "full_rest". NOT
+        "rested", NOT "well_rested", NOT "long_rest", NOT "rest". Only
+        "full_rest". The engine has a whitelist and other strings get
+        treated as a partial heal, which silently breaks the feature.
+      - delta MUST be 0. The engine ignores the numeric delta entirely
+        when status_effect == "full_rest" and applies a full restore
+        (HP, hunger, AND thirst to max). If you put delta:8 the engine
+        will apply only +8 HP and skip hunger/thirst — that's a bug.
+      - stat MUST be "hp" (the schema requires it; the engine ignores
+        the field when the status is full_rest).
+
+    Concrete example — player at HP 4/20 asks Garth to rest at the
+    Survivor's Camp (location_safe:true), Garth grants it:
+      {
+        "success": true,
+        "scale": 6,
+        "narrative_text": "Garth grunts and gestures at the bedroll by the fire. 'Sleep. I'll keep watch.'",
+        "stat_effects": [
+          {"target_id": "player", "stat": "hp", "delta": 0, "status_effect": "full_rest"}
+        ],
+        "fx_requests": [],
+        "repetition_penalty": 0
+      }
+    Note: delta is 0, not 16. The engine restores HP, hunger, and
+    thirst to max — you don't compute the gap.
 
   HEALING POTION OR SPELL FROM AN NPC:
     If the NPC heals the player (cleric blesses them, alchemist hands
