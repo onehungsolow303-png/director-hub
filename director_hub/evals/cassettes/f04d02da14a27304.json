@@ -1,0 +1,38 @@
+{
+  "hash": "f04d02da14a27304883aa311ebeadd27c83f6c7b3ade584c2bb026dcdef5198f",
+  "model": "claude-haiku-4-5",
+  "recorded_at": "2026-04-08T13:13:14.083588+00:00",
+  "request": {
+    "actor_id": "player",
+    "actor_stats": {
+      "hp": 12,
+      "max_hp": 20,
+      "skills": [
+        "herbalism"
+      ]
+    },
+    "player_input": "I look around for berries to eat",
+    "recent_history": null,
+    "scene_context": {
+      "biome": "forest",
+      "location": "thicket",
+      "time_of_day": "afternoon"
+    },
+    "target_id": null,
+    "target_stats": null
+  },
+  "response": {
+    "fx_requests": [],
+    "narrative_text": "You push through the tangled undergrowth, your herbalism training guiding your eye. Among the ferns and fallen branches, you spot a cluster of blackberry bushes heavy with dark, ripe fruit. Their sweet smell mingles with the damp forest loam. You gather a generous handful, careful to avoid the thorns—enough to quiet the hunger gnawing at your belly.",
+    "repetition_penalty": 0,
+    "scale": 6,
+    "stat_effects": [
+      {
+        "delta": 3,
+        "stat": "hp",
+        "target_id": "player"
+      }
+    ],
+    "success": true
+  }
+}

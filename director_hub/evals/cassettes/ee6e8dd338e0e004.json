@@ -1,0 +1,25 @@
+{
+  "hash": "ee6e8dd338e0e004ed8808899ef8e900d6f43490b9e87b7c147e3ffefee27bbd",
+  "model": "claude-haiku-4-5",
+  "recorded_at": "2026-04-08T13:13:26.442466+00:00",
+  "request": {
+    "actor_id": "player",
+    "actor_stats": {
+      "hp": 20,
+      "max_hp": 20
+    },
+    "player_input": "   ",
+    "recent_history": null,
+    "scene_context": null,
+    "target_id": null,
+    "target_stats": null
+  },
+  "response": {
+    "fx_requests": [],
+    "narrative_text": "You stand at the threshold of adventure, waiting for your next move. What do you do?",
+    "repetition_penalty": 0,
+    "scale": 1,
+    "stat_effects": [],
+    "success": false
+  }
+}

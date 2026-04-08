@@ -14,16 +14,26 @@ Config example (`director_hub/config/models.yaml`):
         max_tokens: 1024
       - name: stub
     active: anthropic   # falls back to stub if anthropic fails to initialize
+
+    # Optional record/replay layer for golden-test reproducibility:
+    replay_mode: live           # live | record | replay
+    cassette_dir: evals/cassettes  # relative to director_hub/ or absolute
+
+When replay_mode != live, the configured provider is wrapped in a
+RecordReplayProvider so requests can be cached and re-played byte-identically
+across runs. See providers/record_replay.py for the full mechanism.
 """
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .providers.base import ReasoningProvider
+from .providers.record_replay import CassetteMiss, RecordReplayProvider, ReplayMode
 from .providers.stub import StubProvider
 
 logger = logging.getLogger(__name__)
@@ -37,6 +47,10 @@ class ReasoningEngine:
     def __init__(self, config: dict[str, Any] | None = None, config_path: Path | None = None) -> None:
         self.config = config or _load_config(config_path or _DEFAULT_CONFIG_PATH)
         self._provider: ReasoningProvider = _build_provider(self.config)
+        # Wrap in RecordReplayProvider when replay_mode != live so the
+        # eval suite can capture and replay byte-identical responses
+        # without re-hitting the live LLM. The wrap is no-op in live mode.
+        self._provider = _maybe_wrap_replay(self._provider, self.config)
         logger.info(
             f"[ReasoningEngine] active provider: {self._provider.name} "
             f"(real={self._provider.is_real})"
@@ -59,6 +73,13 @@ class ReasoningEngine:
         used_fallback = not self._provider.is_real
         try:
             inner = self._provider.interpret(action_request)
+        except CassetteMiss:
+            # In replay mode a missing cassette MUST surface as a hard
+            # failure — the whole point of golden-test reproducibility is
+            # that "you forgot to record this scenario" is loud, not
+            # silently papered over with stub responses. Re-raise so the
+            # bridge converts it to a 500 and the eval runner fails.
+            raise
         except Exception as e:  # boundary - fall back to stub on any provider error
             logger.warning(
                 f"[ReasoningEngine] provider {self._provider.name} failed: {e}. "
@@ -127,3 +148,48 @@ def _build_provider(config: dict[str, Any]) -> ReasoningProvider:
         f"[ReasoningEngine] unknown provider '{active_name}'. Using stub."
     )
     return StubProvider()
+
+
+def _maybe_wrap_replay(
+    provider: ReasoningProvider,
+    config: dict[str, Any],
+) -> ReasoningProvider:
+    """Wrap the provider in RecordReplayProvider iff replay_mode != live.
+
+    Reads replay_mode and cassette_dir from the engine config, with an
+    environment-variable override (DIRECTOR_HUB_REPLAY_MODE) so the eval
+    runner can flip modes per-invocation without editing models.yaml.
+
+    Returns the original provider unchanged when in live mode (the
+    default), so production paths pay zero overhead.
+    """
+    env_mode = os.environ.get("DIRECTOR_HUB_REPLAY_MODE")
+    cfg_mode = (env_mode or config.get("replay_mode") or "live").lower()
+    if cfg_mode == "live":
+        return provider
+
+    try:
+        mode = ReplayMode(cfg_mode)
+    except ValueError:
+        logger.warning(
+            f"[ReasoningEngine] unknown replay_mode {cfg_mode!r}. "
+            "Falling back to live (no record/replay)."
+        )
+        return provider
+
+    cassette_dir_str = (
+        os.environ.get("DIRECTOR_HUB_CASSETTE_DIR")
+        or config.get("cassette_dir")
+        or "evals/cassettes"
+    )
+    cassette_dir = Path(cassette_dir_str)
+    if not cassette_dir.is_absolute():
+        # Resolve relative paths against the director_hub package root so
+        # the eval runner works regardless of cwd.
+        cassette_dir = Path(__file__).resolve().parent.parent / cassette_dir
+
+    return RecordReplayProvider(
+        backing=provider,
+        mode=mode,
+        cassette_dir=cassette_dir,
+    )

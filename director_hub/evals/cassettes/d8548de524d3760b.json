@@ -1,0 +1,37 @@
+{
+  "hash": "d8548de524d3760b0c1cd60f2da680a7ec2d10df8cb701312a53a32d867f06af",
+  "model": "claude-haiku-4-5",
+  "recorded_at": "2026-04-08T13:13:20.984853+00:00",
+  "request": {
+    "actor_id": "player",
+    "actor_stats": {
+      "attack": 5,
+      "hp": 18,
+      "max_hp": 20
+    },
+    "player_input": "I attack",
+    "recent_history": [
+      "I attack",
+      "I attack",
+      "I attack",
+      "I attack",
+      "I attack"
+    ],
+    "scene_context": {
+      "biome": "forest"
+    },
+    "target_id": "goblin_01",
+    "target_stats": {
+      "hp": 6,
+      "max_hp": 8
+    }
+  },
+  "response": {
+    "fx_requests": [],
+    "narrative_text": "Your blade flashes forward again, meeting the goblin's frantic defense. The creature hisses and circles, desperately seeking an opening—but you've had the upper hand for rounds now. Press your advantage or change tactics?",
+    "repetition_penalty": 7,
+    "scale": 3,
+    "stat_effects": [],
+    "success": true
+  }
+}

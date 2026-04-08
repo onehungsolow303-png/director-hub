@@ -3,19 +3,44 @@
 Loads every JSON file under `director_hub/evals/golden/`, sends each `input`
 payload to the live Director Hub `/interpret_action` endpoint, and checks the
 response against the per-scenario `expectations`. Designed to run against a
-locally-booted Director Hub (no internet, no real LLM):
+locally-booted Director Hub:
 
     uvicorn director_hub.bridge.server:app --port 7802  &
     python -m director_hub.evals.runner
 
 Exit code is 0 if all scenarios pass, 1 if any fail. Per-scenario verdicts
-print to stdout. Real LLM calls are out of scope for Phase 1; the stub
-ReasoningEngine returns a deterministic-fallback DecisionPayload for every
-non-rejection input, and the expectations are written to be liberal enough
-to pass against the stub while still catching boundary regressions.
+print to stdout.
+
+# Record/replay modes (golden-test reproducibility)
+
+The agentic AI is non-deterministic by nature, so the runner supports
+cassette-based replay for byte-identical reproducibility. The mode is
+flipped via the DIRECTOR_HUB_REPLAY_MODE environment variable, which
+the running Director Hub picks up at startup. Three workflows:
+
+  --mode live (default)
+      Run scenarios against whatever provider is configured. Useful
+      for ad-hoc testing against the live LLM.
+
+  --mode record
+      Boot or restart Director Hub with DIRECTOR_HUB_REPLAY_MODE=record,
+      run all scenarios, write a cassette per scenario into the cassette
+      directory. The runner uses the existing /interpret_action endpoint
+      so the wrapping happens server-side via the engine config override.
+
+  --mode replay
+      Boot Director Hub with DIRECTOR_HUB_REPLAY_MODE=replay. The runner
+      sends scenarios as usual; the server returns the previously recorded
+      response from disk. CassetteMiss → 500 → eval failure (loud, by
+      design — replay misses should never silently fall through).
+
+Note: --mode does NOT bounce the Director Hub for you. The intended
+flow is to start Hub once with the desired DIRECTOR_HUB_REPLAY_MODE,
+then run the eval runner against it. The flag exists in the runner so
+CI can label its mode in logs.
 
 Run via:
-    python -m director_hub.evals.runner [--url URL] [--filter PATTERN]
+    python -m director_hub.evals.runner [--url URL] [--filter PATTERN] [--mode MODE]
 """
 from __future__ import annotations
 
@@ -111,6 +136,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://127.0.0.1:7802")
     ap.add_argument("--filter", default=None, help="substring filter on scenario id")
+    ap.add_argument(
+        "--mode",
+        default="live",
+        choices=("live", "record", "replay"),
+        help="record/replay mode label (informational; the actual mode is "
+             "set on the Director Hub via DIRECTOR_HUB_REPLAY_MODE)",
+    )
     args = ap.parse_args()
 
     scenarios = load_scenarios(args.filter)
@@ -118,7 +150,7 @@ def main() -> int:
         print("no scenarios matched", file=sys.stderr)
         return 1
 
-    print(f"running {len(scenarios)} eval scenarios against {args.url}")
+    print(f"running {len(scenarios)} eval scenarios against {args.url} (mode={args.mode})")
     print()
 
     passed = 0

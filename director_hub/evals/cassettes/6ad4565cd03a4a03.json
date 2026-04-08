@@ -1,0 +1,44 @@
+{
+  "hash": "6ad4565cd03a4a038a89f16c48e67c9ab80189dd67aefb59b1eca9f9d964ce26",
+  "model": "claude-haiku-4-5",
+  "recorded_at": "2026-04-08T13:12:57.319153+00:00",
+  "request": {
+    "actor_id": "player",
+    "actor_stats": {
+      "attack": 5,
+      "defense": 3,
+      "hp": 20,
+      "max_hp": 20
+    },
+    "player_input": "I attack the goblin with my sword",
+    "recent_history": null,
+    "scene_context": {
+      "biome": "forest",
+      "location": "clearing"
+    },
+    "target_id": "goblin_01",
+    "target_stats": {
+      "attack": 3,
+      "defense": 2,
+      "hp": 8,
+      "max_hp": 8
+    }
+  },
+  "response": {
+    "fx_requests": [
+      {
+        "biome": "forest",
+        "kind": "creature_token",
+        "tags": [
+          "goblin",
+          "wounded"
+        ]
+      }
+    ],
+    "narrative_text": "Your blade flashes through the clearing as the goblin shrieks and raises its crude dagger. Steel meets sinew—your sword bites deep, and the creature staggers back, blood dripping from its shoulder wound. It hisses and circles, clearly wounded but not finished.",
+    "repetition_penalty": 0,
+    "scale": 8,
+    "stat_effects": [],
+    "success": true
+  }
+}

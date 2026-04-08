@@ -1,0 +1,45 @@
+{
+  "hash": "5749283ab4b6a7781311e957dab667411d9fc2d878ad7f95dfac99878f7e1f4d",
+  "model": "claude-haiku-4-5",
+  "recorded_at": "2026-04-08T13:13:04.085918+00:00",
+  "request": {
+    "actor_id": "player",
+    "actor_stats": {
+      "attack": 5,
+      "defense": 3,
+      "hp": 20,
+      "max_hp": 20,
+      "skills": [
+        "dirty_fighting"
+      ]
+    },
+    "player_input": "I throw sand in the goblin's eyes",
+    "recent_history": null,
+    "scene_context": {
+      "biome": "forest",
+      "location": "clearing"
+    },
+    "target_id": "goblin_01",
+    "target_stats": {
+      "hp": 8,
+      "max_hp": 8
+    }
+  },
+  "response": {
+    "fx_requests": [
+      {
+        "kind": "fx",
+        "tags": [
+          "dust",
+          "impact",
+          "sand"
+        ]
+      }
+    ],
+    "narrative_text": "You grab a fistful of loose soil and fling it directly into the goblin's face. It shrieks and staggers backward, clawing at its eyes—blinded and disoriented. The creature's guard is completely down, thrashing in frustration and pain.",
+    "repetition_penalty": 0,
+    "scale": 8,
+    "stat_effects": [],
+    "success": true
+  }
+}

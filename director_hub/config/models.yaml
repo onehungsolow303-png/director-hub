@@ -25,3 +25,26 @@ providers:
     notes: "Anthropic Claude. Requires `pip install -e .[anthropic]` and ANTHROPIC_API_KEY env var. Haiku chosen for low-latency in-game responses + higher rate limits than Sonnet."
 
 active: anthropic
+
+# ─── Record/replay (golden-test reproducibility) ────────────────────────
+#
+# The agentic AI is non-deterministic by nature — Anthropic's Messages API
+# does not expose a `seed` parameter, so even temperature:0 calls drift.
+# To get byte-identical responses for golden tests, the configured provider
+# can be wrapped in a RecordReplayProvider:
+#
+#   live    → passthrough (default; no caching, production behavior)
+#   record  → call the live provider, save the response keyed by request hash
+#   replay  → look up the response by hash; raise CassetteMiss if absent
+#             (the live provider is NEVER called in replay mode)
+#
+# Cassettes are SHA256-keyed JSON files under cassette_dir/. The hash
+# excludes session_id so per-test conversations don't invalidate the cache.
+#
+# Override at runtime via env vars:
+#   DIRECTOR_HUB_REPLAY_MODE=replay
+#   DIRECTOR_HUB_CASSETTE_DIR=/path/to/cassettes
+#
+# See providers/record_replay.py for the full mechanism.
+replay_mode: live
+cassette_dir: evals/cassettes
