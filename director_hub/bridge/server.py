@@ -40,11 +40,21 @@ def health() -> dict[str, str]:
 @app.post("/session/start", response_model=SessionStartResponse)
 def session_start(req: SessionStartRequest) -> SessionStartResponse:
     sid = str(uuid.uuid4())
+    # Explicit defaults for the optional list/int fields. The pydantic
+    # generated_schemas defaults them to None, which serializes as JSON
+    # null, which C# Newtonsoft cannot deserialize into a non-nullable
+    # int / List<T>. The Forever engine GameManager.StartDirectorSession
+    # was silently failing on this null and falling back to "no-session"
+    # for every session, which broke memory anchoring + NPC continuity.
+    # See engine commit f460cd1 for the C# side.
     opening = DecisionPayload(
         session_id=sid,
         success=True,
         scale=5,
         narrative_text="[stub] Welcome to the game. The reasoning engine is not yet wired up.",
+        stat_effects=[],
+        fx_requests=[],
+        repetition_penalty=0,
         deterministic_fallback=True,
     )
     return SessionStartResponse(session_id=sid, opening=opening)
