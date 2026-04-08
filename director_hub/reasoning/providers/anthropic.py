@@ -33,6 +33,17 @@ import os
 from pathlib import Path
 from typing import Any
 
+from director_hub.toolbelt.asset_tool import AssetTool
+from director_hub.toolbelt.dice_tool import DiceTool
+from director_hub.toolbelt.game_state_tool import (
+    GameStateTool,
+    remember_request,
+)
+from director_hub.toolbelt.narrative_tool import NarrativeTool
+from director_hub.toolbelt.registry import ToolRegistry
+
+from .base import ReasoningProvider
+
 logger = logging.getLogger(__name__)
 
 # Claude Code stores its OAuth tokens here. The accessToken field rotates
@@ -79,17 +90,6 @@ def _resolve_anthropic_key() -> str | None:
     if fresh:
         return fresh
     return os.environ.get("ANTHROPIC_API_KEY")
-
-from director_hub.toolbelt.asset_tool import AssetTool
-from director_hub.toolbelt.dice_tool import DiceTool
-from director_hub.toolbelt.game_state_tool import (
-    GameStateTool,
-    remember_request,
-)
-from director_hub.toolbelt.narrative_tool import NarrativeTool
-from director_hub.toolbelt.registry import ToolRegistry
-
-from .base import ReasoningProvider
 
 
 class ProviderUnavailable(Exception):

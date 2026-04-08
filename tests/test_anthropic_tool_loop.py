@@ -83,7 +83,7 @@ def test_tool_schemas_have_required_fields(fake_anthropic_module, monkeypatch):
             "game_state_read",
         }
         # Each must have description + input_schema with type=object
-        for name, schema in schemas_by_name.items():
+        for _name, schema in schemas_by_name.items():
             assert schema["description"]
             assert schema["input_schema"]["type"] == "object"
         # dice_resolve requires spec
