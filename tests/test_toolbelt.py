@@ -105,6 +105,15 @@ def test_narrative_tool_unknown_action():
 
 # ---------------------------------------------------------------- GameStateTool
 
+# All GameStateTool tests construct the tool with a non-listening port so
+# the live endpoint always errors and the cache fallback path runs. The
+# default URL (port 7803) is what Forever engine's GameStateServer binds
+# to in play mode; if that server happens to be running on the dev machine
+# during tests, the live endpoint succeeds and the assertions about the
+# cache fallback fail. The non-listening port keeps these tests stable
+# regardless of whether Unity is in play mode.
+_DEAD_STATE_URL = "http://127.0.0.1:7900"
+
 
 def test_game_state_tool_returns_cached_snapshot():
     remember_request(
@@ -115,7 +124,7 @@ def test_game_state_tool_returns_cached_snapshot():
             "scene_context": {"biome": "swamp"},
         }
     )
-    tool = GameStateTool()
+    tool = GameStateTool(base_url=_DEAD_STATE_URL, timeout=0.5)
     result = tool.call(session_id="gs-test-1")
     assert result["ok"] is True
     assert result["found"] is True
@@ -124,13 +133,13 @@ def test_game_state_tool_returns_cached_snapshot():
 
 
 def test_game_state_tool_unknown_session():
-    tool = GameStateTool()
+    tool = GameStateTool(base_url=_DEAD_STATE_URL, timeout=0.5)
     result = tool.call(session_id="never-seen")
     assert result["ok"] is True
     assert result["found"] is False
 
 
 def test_game_state_tool_missing_session_id():
-    tool = GameStateTool()
+    tool = GameStateTool(base_url=_DEAD_STATE_URL, timeout=0.5)
     result = tool.call()
     assert result["ok"] is False

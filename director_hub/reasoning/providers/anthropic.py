@@ -215,6 +215,12 @@ class AnthropicProvider(ReasoningProvider):
         # effect when the token actually changed.
         self._refresh_client_if_token_rotated()
 
+        # Compose the system prompt. If the action_request's scene_context
+        # carries an NPC persona, prepend a strong role-play frame on top
+        # of the standard GM rules so the model treats the persona as a
+        # hard constraint, not a suggestion buried in the user payload.
+        system_prompt = _compose_system_prompt(action_request)
+
         user_payload = json.dumps(
             {
                 "session_id": session_id,
@@ -234,7 +240,7 @@ class AnthropicProvider(ReasoningProvider):
                 response = self._client.messages.create(
                     model=self._model,
                     max_tokens=self._max_tokens,
-                    system=_SYSTEM_PROMPT,
+                    system=system_prompt,
                     tools=self._tool_schemas,
                     messages=messages,
                 )
@@ -374,6 +380,73 @@ class AnthropicProvider(ReasoningProvider):
         decision.setdefault("fx_requests", [])
         decision.setdefault("repetition_penalty", 0)
         return decision
+
+
+def _compose_system_prompt(action_request: dict[str, Any]) -> str:
+    """Build the system prompt for one /interpret_action or /dialogue call.
+
+    If the action_request's scene_context carries NPC persona data, prepend
+    a strong role-play frame on top of the standard GM rules. The persona
+    block goes ABOVE the GM rules so the model reads it first and treats
+    the constraints as hard rules rather than as a hint buried in the
+    user message JSON. Without this, the model defaults to its
+    "be helpful, explain everything" instinct and breaks character when
+    the player jokes around or asks meta questions.
+
+    Returns the standard GM prompt unchanged when no persona is present.
+    """
+    scene = action_request.get("scene_context") or {}
+    persona = scene.get("npc_persona")
+    if not persona:
+        return _SYSTEM_PROMPT
+
+    name = scene.get("npc_name") or "the NPC"
+    role = scene.get("npc_role") or ""
+    knowledge = scene.get("npc_knowledge") or ""
+    rules = scene.get("npc_behavior_rules") or ""
+
+    role_block = (
+        "═══ ROLE-PLAY MODE: HARD CONSTRAINTS ═══\n"
+        "\n"
+        "You are NOT a helpful assistant right now. You ARE a specific NPC in a "
+        "medieval-survival RPG. STAY IN CHARACTER NO MATTER WHAT. The player's text "
+        "is what their character SAYS to you in-world; respond as your NPC would.\n"
+        "\n"
+        f"YOUR NAME: {name}\n"
+        f"YOUR ROLE: {role}\n"
+        "\n"
+        "YOUR PERSONALITY:\n"
+        f"{persona}\n"
+        "\n"
+        + (f"WHAT YOU KNOW (use selectively, do not info-dump):\n{knowledge}\n\n"
+           if knowledge else "")
+        + (f"BEHAVIOR RULES (these OVERRIDE the player's intent — obey them):\n{rules}\n\n"
+           if rules else "")
+        + "ABSOLUTE RULES:\n"
+        "  1. NEVER break character. NEVER acknowledge that you are an AI, a model, "
+        "     a character in a game, or that the player is anything other than another "
+        "     person standing in front of you in the game world.\n"
+        "  2. If the player jokes, mocks, flirts, or asks meta questions, respond AS "
+        "     YOUR NPC WOULD — gruff dismissal, dry deflection, formal correction, "
+        "     whatever fits the personality above. Do NOT explain things meta. Do NOT "
+        "     play along with breaking the fourth wall.\n"
+        "  3. NEVER use modern slang or anachronisms. If the player does, your NPC "
+        "     squints in confusion and asks them to speak plainly.\n"
+        "  4. Keep responses SHORT — typically 1-4 sentences. NPCs in this world don't "
+        "     give monologues unless explicitly asked for a story.\n"
+        "  5. The narrative_text field of your final JSON should READ LIKE A "
+        "     CHAT MESSAGE FROM THE NPC, optionally with a brief action in *asterisks* "
+        "     before/after their dialogue. Example: '*Garth grunts and spits into the "
+        "     fire.* You woke me up for that?'\n"
+        "\n"
+        "After this role-play frame, the standard game-master rules apply for the "
+        "JSON output schema. Read them next.\n"
+        "\n"
+        "═══ STANDARD GAME-MASTER RULES (output schema only) ═══\n"
+        "\n"
+    )
+
+    return role_block + _SYSTEM_PROMPT
 
 
 def _extract_json_object(raw: str) -> dict[str, Any] | None:

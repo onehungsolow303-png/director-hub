@@ -279,6 +279,63 @@ def test_json_extractor_handles_nested_objects():
     assert result == {"outer": {"inner": {"deeper": 1}}, "scale": 5}
 
 
+def test_compose_system_prompt_no_persona_returns_default():
+    from director_hub.reasoning.providers.anthropic import (
+        _SYSTEM_PROMPT,
+        _compose_system_prompt,
+    )
+    # No scene_context at all
+    assert _compose_system_prompt({}) == _SYSTEM_PROMPT
+    # Empty scene_context
+    assert _compose_system_prompt({"scene_context": {}}) == _SYSTEM_PROMPT
+    # scene_context with no persona key
+    assert _compose_system_prompt({"scene_context": {"biome": "forest"}}) == _SYSTEM_PROMPT
+
+
+def test_compose_system_prompt_with_persona_includes_role_block():
+    from director_hub.reasoning.providers.anthropic import (
+        _SYSTEM_PROMPT,
+        _compose_system_prompt,
+    )
+    request = {
+        "scene_context": {
+            "npc_name": "Old Garth",
+            "npc_role": "Camp leader",
+            "npc_persona": "You are gruff and short-tempered.",
+            "npc_knowledge": "The Hollow is dangerous.",
+            "npc_behavior_rules": "RULE 1: never speak more than 3 sentences.",
+        },
+    }
+    prompt = _compose_system_prompt(request)
+    # The role-play frame should appear FIRST, before the standard rules
+    assert prompt.index("ROLE-PLAY MODE") < prompt.index("standard game-master rules")
+    # All persona fields should be embedded in the prompt
+    assert "Old Garth" in prompt
+    assert "Camp leader" in prompt
+    assert "gruff and short-tempered" in prompt
+    assert "Hollow is dangerous" in prompt
+    assert "never speak more than 3 sentences" in prompt
+    # The standard GM prompt should still be present at the bottom
+    assert _SYSTEM_PROMPT in prompt
+
+
+def test_compose_system_prompt_handles_partial_persona():
+    """If only persona is set (no knowledge, no rules), still wrap it
+    with the role-play frame and skip the empty optional sections."""
+    from director_hub.reasoning.providers.anthropic import _compose_system_prompt
+    request = {
+        "scene_context": {
+            "npc_persona": "You are a cheerful wandering bard.",
+        },
+    }
+    prompt = _compose_system_prompt(request)
+    assert "ROLE-PLAY MODE" in prompt
+    assert "cheerful wandering bard" in prompt
+    # Optional blocks shouldn't appear
+    assert "WHAT YOU KNOW" not in prompt
+    assert "BEHAVIOR RULES" not in prompt
+
+
 def test_credential_resolver_prefers_credentials_file_over_env(monkeypatch, tmp_path):
     """When ~/.claude/.credentials.json exists with an OAuth token, the
     resolver should return it instead of the (likely stale) env var."""
