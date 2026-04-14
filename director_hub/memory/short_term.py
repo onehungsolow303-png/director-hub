@@ -1,4 +1,5 @@
 """Short-term memory - ongoing chain-of-thought for the current session. STUB."""
+
 from __future__ import annotations
 
 

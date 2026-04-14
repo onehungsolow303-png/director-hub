@@ -3,6 +3,7 @@
 ShortTermMemory and LongTermMemory have their own dedicated test files;
 this file covers the disk paths added in Round M.
 """
+
 from __future__ import annotations
 
 import json

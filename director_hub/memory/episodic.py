@@ -10,6 +10,7 @@ Persistence is JSONL (one event per line) at
 is configurable; pass `persist=False` to keep memory in-process only
 (useful for tests).
 """
+
 from __future__ import annotations
 
 import json

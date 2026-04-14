@@ -5,6 +5,7 @@ no real LLM provider is configured (or when the configured provider's
 credentials are missing). This is the safety net the bridge falls back
 to so the engine never returns 500 just because someone forgot an API key.
 """
+
 from __future__ import annotations
 
 from typing import Any

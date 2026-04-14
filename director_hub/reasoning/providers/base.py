@@ -5,6 +5,7 @@ decision dict must validate against C:/Dev/.shared/schemas/decision.schema.json.
 The base class handles the wrapping (schema_version, session_id propagation,
 fallback flag) so individual providers only return the narrative + effects.
 """
+
 from __future__ import annotations
 
 import abc

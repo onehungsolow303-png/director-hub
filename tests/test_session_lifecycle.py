@@ -17,6 +17,7 @@ Uses the conftest `client` fixture which monkey-patches the bridge
 server's _engine global to a stub, so this test runs deterministically
 regardless of whether ANTHROPIC_API_KEY is set on the CI runner.
 """
+
 from __future__ import annotations
 
 

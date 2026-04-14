@@ -26,6 +26,7 @@ Output: append-only JSONL at
 Best-effort: any I/O failure is logged at WARNING level and the
 request itself still succeeds. Logging is never on the critical path.
 """
+
 from __future__ import annotations
 
 import json

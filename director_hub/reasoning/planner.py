@@ -10,6 +10,7 @@ needs without depending on the LLM provider being configured. Real
 LLM-driven planning is the AnthropicProvider's job inside `interpret()`;
 this Planner is the deterministic fallback path.
 """
+
 from __future__ import annotations
 
 import re

@@ -1,4 +1,5 @@
 """Tool registry - enumerates available tools to the reasoning engine. STUB."""
+
 from __future__ import annotations
 
 from .base import Tool

@@ -4,6 +4,7 @@ Forces the in-memory dict backend so tests run without chromadb installed.
 A separate integration test path (skipped if chromadb is missing) covers
 the chroma backend with a tmp_path collection.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -59,6 +60,7 @@ def test_facade_falls_back_to_dict_when_chroma_unavailable(tmp_path: Path):
 
 try:
     import chromadb  # noqa: F401
+
     _CHROMA_AVAILABLE = True
 except ImportError:
     _CHROMA_AVAILABLE = False

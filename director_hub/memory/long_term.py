@@ -12,6 +12,7 @@ Spec §14 follow-up #3. Two backends:
 The public LongTermMemory class auto-detects which backend to use at
 construction. Pass `force_dict=True` to skip chromadb in tests.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,7 +56,9 @@ class _ChromaBackend:
 
     name = "chroma"
 
-    def __init__(self, path: Path = DEFAULT_CHROMA_PATH, collection: str = "director_hub_ltm") -> None:
+    def __init__(
+        self, path: Path = DEFAULT_CHROMA_PATH, collection: str = "director_hub_ltm"
+    ) -> None:
         try:
             import chromadb  # noqa: F401
         except ImportError as e:
@@ -114,9 +117,7 @@ class LongTermMemory:
             self._backend = _ChromaBackend(path=path or DEFAULT_CHROMA_PATH)
             logger.info("[LongTermMemory] using ChromaBackend at %s", path or DEFAULT_CHROMA_PATH)
         except (ImportError, RuntimeError) as e:
-            logger.warning(
-                "[LongTermMemory] ChromaBackend unavailable (%s); using DictBackend.", e
-            )
+            logger.warning("[LongTermMemory] ChromaBackend unavailable (%s); using DictBackend.", e)
             self._backend = _DictBackend()
 
     @property

@@ -10,6 +10,7 @@ NOTE: For combat dice that affect the engine's source-of-truth state
 return stat_effects in the DecisionPayload and let the engine resolve.
 This tool is for LLM-side narrative checks only.
 """
+
 from __future__ import annotations
 
 import re

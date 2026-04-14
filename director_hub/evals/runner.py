@@ -42,6 +42,7 @@ CI can label its mode in logs.
 Run via:
     python -m director_hub.evals.runner [--url URL] [--filter PATTERN] [--mode MODE]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -74,9 +75,7 @@ def check_expectations(
 
     expected_status = expectations.get("expected_status", 200)
     if response_status != expected_status:
-        failures.append(
-            f"status: got {response_status}, expected {expected_status}"
-        )
+        failures.append(f"status: got {response_status}, expected {expected_status}")
         return False, failures
 
     if expected_status != 200:
@@ -141,7 +140,7 @@ def main() -> int:
         default="live",
         choices=("live", "record", "replay"),
         help="record/replay mode label (informational; the actual mode is "
-             "set on the Director Hub via DIRECTOR_HUB_REPLAY_MODE)",
+        "set on the Director Hub via DIRECTOR_HUB_REPLAY_MODE)",
     )
     args = ap.parse_args()
 

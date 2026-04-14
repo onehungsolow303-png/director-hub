@@ -9,6 +9,7 @@ Each span is a dict with at minimum {trace_id, phase, ts}. The
 LoopController adds phase-specific fields (observation_summary,
 decision_summary, elapsed_ms, failure_tag).
 """
+
 from __future__ import annotations
 
 import json

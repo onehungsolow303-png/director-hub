@@ -16,6 +16,7 @@ Update flow when contracts change:
   3. cp C:/Dev/.shared/codegen/golden_python.py C:/Dev/Director Hub/director_hub/bridge/_generated_schemas.py
   4. Run pytest tests/
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal

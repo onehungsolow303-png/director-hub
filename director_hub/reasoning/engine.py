@@ -23,6 +23,7 @@ When replay_mode != live, the configured provider is wrapped in a
 RecordReplayProvider so requests can be cached and re-played byte-identically
 across runs. See providers/record_replay.py for the full mechanism.
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,13 +39,13 @@ from .providers.stub import StubProvider
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent / "config" / "models.yaml"
-)
+_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "models.yaml"
 
 
 class ReasoningEngine:
-    def __init__(self, config: dict[str, Any] | None = None, config_path: Path | None = None) -> None:
+    def __init__(
+        self, config: dict[str, Any] | None = None, config_path: Path | None = None
+    ) -> None:
         self.config = config or _load_config(config_path or _DEFAULT_CONFIG_PATH)
         self._provider: ReasoningProvider = _build_provider(self.config)
         # Wrap in RecordReplayProvider when replay_mode != live so the
@@ -129,9 +130,7 @@ def _build_provider(config: dict[str, Any]) -> ReasoningProvider:
         try:
             from .providers.anthropic import AnthropicProvider, ProviderUnavailable
         except ImportError as e:
-            logger.warning(
-                f"[ReasoningEngine] anthropic provider import failed: {e}. Using stub."
-            )
+            logger.warning(f"[ReasoningEngine] anthropic provider import failed: {e}. Using stub.")
             return StubProvider()
         try:
             return AnthropicProvider(
@@ -139,14 +138,10 @@ def _build_provider(config: dict[str, Any]) -> ReasoningProvider:
                 max_tokens=int(active_cfg.get("max_tokens", 1024)),
             )
         except ProviderUnavailable as e:
-            logger.warning(
-                f"[ReasoningEngine] anthropic provider unavailable: {e}. Using stub."
-            )
+            logger.warning(f"[ReasoningEngine] anthropic provider unavailable: {e}. Using stub.")
             return StubProvider()
 
-    logger.warning(
-        f"[ReasoningEngine] unknown provider '{active_name}'. Using stub."
-    )
+    logger.warning(f"[ReasoningEngine] unknown provider '{active_name}'. Using stub.")
     return StubProvider()
 
 

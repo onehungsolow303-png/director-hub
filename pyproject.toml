@@ -63,3 +63,17 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["F401"]  # tests intentionally import-and-not-use sometimes
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = [
+    "_archive",
+    ".venv",
+    "build",
+    "dist",
+]
+

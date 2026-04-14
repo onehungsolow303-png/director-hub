@@ -25,6 +25,7 @@ installable on systems without the SDK.
 
 Spec: docs/toolbelt-status.md (audit doc for this wiring).
 """
+
 from __future__ import annotations
 
 import json
@@ -349,9 +350,7 @@ class AnthropicProvider(ReasoningProvider):
                 continue
 
             # Unknown / refusal / max_tokens — surface as provider error
-            raise ProviderUnavailable(
-                f"unexpected stop_reason: {response.stop_reason!r}"
-            )
+            raise ProviderUnavailable(f"unexpected stop_reason: {response.stop_reason!r}")
 
         raise ProviderUnavailable(
             f"tool loop exceeded {self._max_tool_iterations} iterations without end_turn"
@@ -368,9 +367,7 @@ class AnthropicProvider(ReasoningProvider):
         """
         latest = _resolve_anthropic_key()
         if latest and latest != self._current_key:
-            logger.warning(
-                "[AnthropicProvider] credential rotated, rebuilding client"
-            )
+            logger.warning("[AnthropicProvider] credential rotated, rebuilding client")
             self._client = self._anthropic.Anthropic(api_key=latest)
             self._current_key = latest
 
@@ -392,12 +389,14 @@ class AnthropicProvider(ReasoningProvider):
 
             tool = self._registry.get(tool_name)
             if tool is None:
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps({"ok": False, "error": f"unknown tool: {tool_name}"}),
-                    "is_error": True,
-                })
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps({"ok": False, "error": f"unknown tool: {tool_name}"}),
+                        "is_error": True,
+                    }
+                )
                 continue
 
             try:
@@ -410,19 +409,23 @@ class AnthropicProvider(ReasoningProvider):
                     {k: v for k, v in tool_input.items() if k != "session_id"},
                     {k: tool_output.get(k) for k in ("ok", "found", "total", "passed", "size")},
                 )
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(tool_output, default=str),
-                })
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps(tool_output, default=str),
+                    }
+                )
             except Exception as e:  # boundary - tool failures must not crash the loop
                 logger.warning("[AnthropicProvider] tool %s raised: %s", tool_name, e)
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps({"ok": False, "error": str(e)}),
-                    "is_error": True,
-                })
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps({"ok": False, "error": str(e)}),
+                        "is_error": True,
+                    }
+                )
 
         return results
 
@@ -507,10 +510,16 @@ def _compose_system_prompt(action_request: dict[str, Any]) -> str:
         "YOUR PERSONALITY:\n"
         f"{persona}\n"
         "\n"
-        + (f"WHAT YOU KNOW (use selectively, do not info-dump):\n{knowledge}\n\n"
-           if knowledge else "")
-        + (f"BEHAVIOR RULES (these OVERRIDE the player's intent — obey them):\n{rules}\n\n"
-           if rules else "")
+        + (
+            f"WHAT YOU KNOW (use selectively, do not info-dump):\n{knowledge}\n\n"
+            if knowledge
+            else ""
+        )
+        + (
+            f"BEHAVIOR RULES (these OVERRIDE the player's intent — obey them):\n{rules}\n\n"
+            if rules
+            else ""
+        )
         + "ABSOLUTE RULES:\n"
         "  1. NEVER break character. NEVER acknowledge that you are an AI, a model, "
         "     a character in a game, or that the player is anything other than another "

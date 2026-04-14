@@ -15,6 +15,7 @@ End-to-end behavior against the real Anthropic API is verified by the
 operator running the live curl in docs/toolbelt-status.md; this test
 file covers the dispatch + parse logic in isolation.
 """
+
 from __future__ import annotations
 
 import json
@@ -102,14 +103,16 @@ def test_loop_dispatches_tool_then_parses_final_json(fake_anthropic_module, monk
         content=[_tool_use_block("toolu_1", "dice_resolve", {"spec": "1d20", "dc": 10})],
     )
     # Iteration 2: return the final JSON
-    final_json = json.dumps({
-        "success": True,
-        "scale": 7,
-        "narrative_text": "You rolled well.",
-        "stat_effects": [],
-        "fx_requests": [],
-        "repetition_penalty": 0,
-    })
+    final_json = json.dumps(
+        {
+            "success": True,
+            "scale": 7,
+            "narrative_text": "You rolled well.",
+            "stat_effects": [],
+            "fx_requests": [],
+            "repetition_penalty": 0,
+        }
+    )
     iter2 = _response(stop_reason="end_turn", content=[_text_block(final_json)])
     fake_client.messages.create.side_effect = [iter1, iter2]
 
@@ -117,11 +120,13 @@ def test_loop_dispatches_tool_then_parses_final_json(fake_anthropic_module, monk
         from director_hub.reasoning.providers.anthropic import AnthropicProvider
 
         p = AnthropicProvider()
-        result = p.interpret({
-            "session_id": "unit-1",
-            "actor_stats": {"hp": 20, "max_hp": 20},
-            "player_input": "I roll for sneak",
-        })
+        result = p.interpret(
+            {
+                "session_id": "unit-1",
+                "actor_stats": {"hp": 20, "max_hp": 20},
+                "player_input": "I roll for sneak",
+            }
+        )
 
     # Two API calls (the loop went one round)
     assert fake_client.messages.create.call_count == 2
@@ -169,18 +174,22 @@ def test_session_id_auto_injected_into_game_state_read(fake_anthropic_module, mo
         from director_hub.toolbelt.game_state_tool import remember_request
 
         # Seed the cache so game_state_read returns 'found'
-        remember_request({
-            "session_id": "auto-inject-test",
-            "actor_id": "player",
-            "actor_stats": {"hp": 9, "max_hp": 20},
-        })
+        remember_request(
+            {
+                "session_id": "auto-inject-test",
+                "actor_id": "player",
+                "actor_stats": {"hp": 9, "max_hp": 20},
+            }
+        )
 
         p = AnthropicProvider()
-        result = p.interpret({
-            "session_id": "auto-inject-test",
-            "actor_stats": {"hp": 9, "max_hp": 20},
-            "player_input": "How am I doing?",
-        })
+        result = p.interpret(
+            {
+                "session_id": "auto-inject-test",
+                "actor_stats": {"hp": 9, "max_hp": 20},
+                "player_input": "How am I doing?",
+            }
+        )
 
     assert result["success"] is True
     final_messages = fake_client.messages.create.call_args_list[1].kwargs["messages"]
@@ -220,12 +229,14 @@ def test_max_iterations_raises(fake_anthropic_module, monkeypatch):
 
 def test_json_extractor_handles_bare_object():
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     result = _extract_json_object('{"success": true, "scale": 5}')
     assert result == {"success": True, "scale": 5}
 
 
 def test_json_extractor_handles_code_fence():
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     raw = '```json\n{"narrative_text": "ok"}\n```'
     result = _extract_json_object(raw)
     assert result == {"narrative_text": "ok"}
@@ -235,11 +246,12 @@ def test_json_extractor_handles_prose_wrapped_fence():
     """The LLM sometimes adds prose before the JSON despite the prompt
     saying not to. The extractor must still find the object."""
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     raw = (
         "Here you go, the engine cache shows no scene so I'll improvise:\n\n"
-        '```json\n'
+        "```json\n"
         '{"success": true, "scale": 7, "narrative_text": "vivid scene"}\n'
-        '```\n'
+        "```\n"
         "Let me know if you want changes."
     )
     result = _extract_json_object(raw)
@@ -252,6 +264,7 @@ def test_json_extractor_handles_prose_wrapped_fence():
 def test_json_extractor_skips_braces_inside_strings():
     """A '{' or '}' inside a string literal must not affect brace counting."""
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     raw = '{"narrative_text": "He said {hello} and walked away"}'
     result = _extract_json_object(raw)
     assert result == {"narrative_text": "He said {hello} and walked away"}
@@ -259,6 +272,7 @@ def test_json_extractor_skips_braces_inside_strings():
 
 def test_json_extractor_handles_escaped_quotes():
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     raw = '{"narrative_text": "She whispered \\"begone\\" with venom"}'
     result = _extract_json_object(raw)
     assert result is not None
@@ -267,6 +281,7 @@ def test_json_extractor_handles_escaped_quotes():
 
 def test_json_extractor_returns_none_when_no_object():
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     assert _extract_json_object("just plain text with no braces") is None
     assert _extract_json_object("") is None
     assert _extract_json_object("[1, 2, 3]") is None  # array, not object
@@ -274,6 +289,7 @@ def test_json_extractor_returns_none_when_no_object():
 
 def test_json_extractor_handles_nested_objects():
     from director_hub.reasoning.providers.anthropic import _extract_json_object
+
     raw = '{"outer": {"inner": {"deeper": 1}}, "scale": 5}'
     result = _extract_json_object(raw)
     assert result == {"outer": {"inner": {"deeper": 1}}, "scale": 5}
@@ -284,6 +300,7 @@ def test_compose_system_prompt_no_persona_returns_default():
         _SYSTEM_PROMPT,
         _compose_system_prompt,
     )
+
     # No scene_context at all
     assert _compose_system_prompt({}) == _SYSTEM_PROMPT
     # Empty scene_context
@@ -297,6 +314,7 @@ def test_compose_system_prompt_with_persona_includes_role_block():
         _SYSTEM_PROMPT,
         _compose_system_prompt,
     )
+
     request = {
         "scene_context": {
             "npc_name": "Old Garth",
@@ -323,6 +341,7 @@ def test_compose_system_prompt_handles_partial_persona():
     """If only persona is set (no knowledge, no rules), still wrap it
     with the role-play frame and skip the empty optional sections."""
     from director_hub.reasoning.providers.anthropic import _compose_system_prompt
+
     request = {
         "scene_context": {
             "npc_persona": "You are a cheerful wandering bard.",
@@ -346,13 +365,17 @@ def test_credential_resolver_prefers_credentials_file_over_env(monkeypatch, tmp_
     creds_dir = tmp_path / ".claude"
     creds_dir.mkdir()
     creds_file = creds_dir / ".credentials.json"
-    creds_file.write_text(json.dumps({
-        "claudeAiOauth": {
-            "accessToken": "fresh-oauth-token-from-disk",
-            "refreshToken": "rt",
-            "expiresAt": 9999999999999,
-        }
-    }))
+    creds_file.write_text(
+        json.dumps(
+            {
+                "claudeAiOauth": {
+                    "accessToken": "fresh-oauth-token-from-disk",
+                    "refreshToken": "rt",
+                    "expiresAt": 9999999999999,
+                }
+            }
+        )
+    )
 
     import importlib
 
@@ -389,7 +412,9 @@ def test_credential_resolver_returns_none_when_neither_source_present(monkeypatc
     assert anthropic_provider._resolve_anthropic_key() is None
 
 
-def test_provider_rebuilds_client_on_credential_rotation(fake_anthropic_module, monkeypatch, tmp_path):
+def test_provider_rebuilds_client_on_credential_rotation(
+    fake_anthropic_module, monkeypatch, tmp_path
+):
     """When the credentials file rotates between interpret() calls, the
     provider should rebuild its client with the new token."""
     fake_module, fake_client = fake_anthropic_module
@@ -400,9 +425,11 @@ def test_provider_rebuilds_client_on_credential_rotation(fake_anthropic_module, 
     creds_dir = tmp_path / ".claude"
     creds_dir.mkdir()
     creds_file = creds_dir / ".credentials.json"
-    creds_file.write_text(json.dumps({
-        "claudeAiOauth": {"accessToken": "token-v1", "refreshToken": "r", "expiresAt": 9e12}
-    }))
+    creds_file.write_text(
+        json.dumps(
+            {"claudeAiOauth": {"accessToken": "token-v1", "refreshToken": "r", "expiresAt": 9e12}}
+        )
+    )
 
     # End-turn response so the loop exits after one iteration
     iter_response = _response(
@@ -429,9 +456,17 @@ def test_provider_rebuilds_client_on_credential_rotation(fake_anthropic_module, 
         assert fake_module.Anthropic.call_count == 1  # still just construction
 
         # Rotate the token on disk
-        creds_file.write_text(json.dumps({
-            "claudeAiOauth": {"accessToken": "token-v2", "refreshToken": "r", "expiresAt": 9e12}
-        }))
+        creds_file.write_text(
+            json.dumps(
+                {
+                    "claudeAiOauth": {
+                        "accessToken": "token-v2",
+                        "refreshToken": "r",
+                        "expiresAt": 9e12,
+                    }
+                }
+            )
+        )
 
         # Second interpret() call: should detect rotation and rebuild
         p.interpret({"session_id": "rot-test", "player_input": "y"})

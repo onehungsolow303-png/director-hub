@@ -9,6 +9,7 @@ The rubric is fixed (not LLM-generated) so it's deterministic and runs
 in CI without an API key. A future spec could add a Vertex-AI-style
 adaptive rubric that the LLM generates per-task and validates per-task.
 """
+
 from __future__ import annotations
 
 from typing import Any

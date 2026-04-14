@@ -1,4 +1,5 @@
 """Per-step trace capture. STUB."""
+
 from __future__ import annotations
 
 from typing import Any

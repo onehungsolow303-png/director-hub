@@ -10,6 +10,7 @@ Endpoints (Phase 1 stubs):
 Reasoning engine and tools are stubs. Real implementation tracked in
 spec §14 follow-ups.
 """
+
 from __future__ import annotations
 
 import time

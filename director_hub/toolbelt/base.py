@@ -1,4 +1,5 @@
 """Tool ABC - every tool the brain can call implements this. STUB."""
+
 from __future__ import annotations
 
 import abc

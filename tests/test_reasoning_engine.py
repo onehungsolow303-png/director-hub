@@ -14,6 +14,7 @@ Tests construct engines with explicit config rather than calling
 point at a real LLM provider in production. Test isolation requires not
 depending on that file.
 """
+
 from __future__ import annotations
 
 import os
@@ -80,9 +81,7 @@ def test_anthropic_falls_back_to_stub_without_api_key(monkeypatch, tmp_path):
 
     importlib.reload(anthropic_provider)
 
-    engine = ReasoningEngine(
-        config={"active": "anthropic", "providers": [{"name": "anthropic"}]}
-    )
+    engine = ReasoningEngine(config={"active": "anthropic", "providers": [{"name": "anthropic"}]})
     # Either falls back to stub (anthropic SDK installed but no key) OR
     # falls back to stub (anthropic SDK not installed at all). Both paths
     # land at the same provider name.

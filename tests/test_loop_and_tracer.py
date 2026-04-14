@@ -3,6 +3,7 @@
 Exercises the four-phase loop end-to-end against the stub reasoning engine,
 plus the tracer's in-memory + disk-persistence paths.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,10 @@ def _observation() -> dict:
 
 def test_loop_runs_one_step_against_stub(tmp_path: Path):
     tracer = Tracer(traces_root=tmp_path / "traces")
-    loop = LoopController(engine=ReasoningEngine(config={"active": "stub", "providers": [{"name": "stub"}]}), tracer=tracer)
+    loop = LoopController(
+        engine=ReasoningEngine(config={"active": "stub", "providers": [{"name": "stub"}]}),
+        tracer=tracer,
+    )
     decision = loop.step(_observation())
     assert decision["session_id"] == "loop-test"
     assert "narrative_text" in decision
@@ -38,7 +42,10 @@ def test_loop_runs_one_step_against_stub(tmp_path: Path):
 
 def test_loop_emits_three_trace_phases(tmp_path: Path):
     tracer = Tracer(traces_root=tmp_path / "traces")
-    loop = LoopController(engine=ReasoningEngine(config={"active": "stub", "providers": [{"name": "stub"}]}), tracer=tracer)
+    loop = LoopController(
+        engine=ReasoningEngine(config={"active": "stub", "providers": [{"name": "stub"}]}),
+        tracer=tracer,
+    )
     loop.step(_observation())
     spans = tracer.all()
     phases = [s["phase"] for s in spans]
@@ -49,7 +56,10 @@ def test_loop_emits_three_trace_phases(tmp_path: Path):
 
 def test_loop_traces_share_a_single_trace_id(tmp_path: Path):
     tracer = Tracer(traces_root=tmp_path / "traces")
-    loop = LoopController(engine=ReasoningEngine(config={"active": "stub", "providers": [{"name": "stub"}]}), tracer=tracer)
+    loop = LoopController(
+        engine=ReasoningEngine(config={"active": "stub", "providers": [{"name": "stub"}]}),
+        tracer=tracer,
+    )
     loop.step(_observation())
     spans = tracer.all()
     trace_ids = {s["trace_id"] for s in spans}
@@ -58,9 +68,11 @@ def test_loop_traces_share_a_single_trace_id(tmp_path: Path):
 
 def test_loop_handles_engine_failure_gracefully(tmp_path: Path):
     """If the engine raises, the loop catches and emits a fallback decision."""
+
     class _BoomEngine:
         provider_name = "boom"
         provider_is_real = True
+
         def interpret(self, _):
             raise RuntimeError("simulated failure")
 

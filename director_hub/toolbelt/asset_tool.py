@@ -4,6 +4,7 @@ Wired to call Asset Manager's HTTP bridge (default 127.0.0.1:7801) via
 httpx. Falls back to a structured error when Asset Manager is unreachable
 so the reasoning engine never crashes on a transient network error.
 """
+
 from __future__ import annotations
 
 from typing import Any

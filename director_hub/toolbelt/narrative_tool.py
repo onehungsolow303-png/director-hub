@@ -5,6 +5,7 @@ from across a session. Each entry is a (timestamp, actor, text) tuple.
 Real persistence is the EpisodicMemory's job (Round M); this tool just
 captures structured journal lines for use within a single reasoning loop.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

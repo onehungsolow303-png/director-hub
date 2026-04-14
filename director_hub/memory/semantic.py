@@ -9,6 +9,7 @@ but don't need vector search: NPC reputations, faction states, world
 flags, named-entity beliefs, etc. Use LongTermMemory's ChromaDB backend
 for free-text recall.
 """
+
 from __future__ import annotations
 
 import json

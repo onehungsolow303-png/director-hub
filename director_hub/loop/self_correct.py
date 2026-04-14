@@ -11,6 +11,7 @@ deterministic rules: re-plan if the result is missing essential fields,
 has an out-of-range scale, has been flagged with a non-recoverable
 FailureTag, or hit a tool timeout.
 """
+
 from __future__ import annotations
 
 from typing import Any

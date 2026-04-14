@@ -11,6 +11,7 @@ Tier responsibilities:
   semantic   - world facts / NPC reputations / flags (single JSON file)
   long       - free-text recall (ChromaDB vector store, see long_term.py)
 """
+
 from __future__ import annotations
 
 from pathlib import Path

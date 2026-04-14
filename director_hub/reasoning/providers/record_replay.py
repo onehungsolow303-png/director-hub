@@ -54,13 +54,14 @@ The next run with mode=REPLAY against the same cassette_dir + same
 action_request will return the cached `decision` without ever calling
 Anthropic — true deterministic test runs.
 """
+
 from __future__ import annotations
 
-import enum
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -69,8 +70,8 @@ from .base import ReasoningProvider
 logger = logging.getLogger(__name__)
 
 
-class ReplayMode(str, enum.Enum):
-    LIVE = "live"      # passthrough — no cassette interaction
+class ReplayMode(StrEnum):
+    LIVE = "live"  # passthrough — no cassette interaction
     RECORD = "record"  # call backing provider + write cassette
     REPLAY = "replay"  # read cassette only; never call backing provider
 
@@ -167,9 +168,8 @@ class RecordReplayProvider(ReasoningProvider):
             "hash": cassette_key,
             "request": _canonical_request(request),
             "response": response,
-            "model": getattr(self._backing, "_model", None)
-                     or getattr(self._backing, "name", None),
-            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "model": getattr(self._backing, "_model", None) or getattr(self._backing, "name", None),
+            "recorded_at": datetime.now(UTC).isoformat(),
         }
         cassette_path.write_text(
             json.dumps(cassette, indent=2, ensure_ascii=False, sort_keys=True),
@@ -190,9 +190,7 @@ class RecordReplayProvider(ReasoningProvider):
         try:
             cassette = json.loads(cassette_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
-            raise CassetteMiss(
-                f"cassette at {cassette_path} could not be loaded: {e}"
-            ) from e
+            raise CassetteMiss(f"cassette at {cassette_path} could not be loaded: {e}") from e
 
         # Defend against truncated filename collisions: the file is named
         # by the first 16 hex chars of the hash but stores the full hash.
@@ -208,9 +206,7 @@ class RecordReplayProvider(ReasoningProvider):
 
         response = cassette.get("response")
         if not isinstance(response, dict):
-            raise CassetteMiss(
-                f"cassette at {cassette_path} has no response dict"
-            )
+            raise CassetteMiss(f"cassette at {cassette_path} has no response dict")
         return response
 
     # ─────────────────────────────────────────────────────────────────
@@ -242,8 +238,4 @@ def _canonical_request(action_request: dict[str, Any]) -> dict[str, Any]:
         - session_id (per-conversation, varies every test)
         - schema_version (contract version, doesn't affect responses)
     """
-    return {
-        k: v
-        for k, v in action_request.items()
-        if k not in ("session_id", "schema_version")
-    }
+    return {k: v for k, v in action_request.items() if k not in ("session_id", "schema_version")}

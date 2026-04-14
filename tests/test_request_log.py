@@ -7,6 +7,7 @@ Verifies the JSONL writer:
   - Truncates over-long player_input and narrative_text
   - Survives I/O errors gracefully (no exception raised to caller)
 """
+
 from __future__ import annotations
 
 import json
@@ -108,9 +109,13 @@ def test_log_request_swallows_io_errors(tmp_path: Path):
     """A disk-full or permission error must NOT propagate to the caller."""
     bad_root = tmp_path / "nope"  # we'll patch open to raise
 
-    with patch("director_hub.observability.request_log.Path.open", side_effect=OSError("disk full")):
+    with patch(
+        "director_hub.observability.request_log.Path.open", side_effect=OSError("disk full")
+    ):
         # Should not raise
-        log_request("/interpret_action", _request(), _response(), latency_ms=10, traces_root=bad_root)
+        log_request(
+            "/interpret_action", _request(), _response(), latency_ms=10, traces_root=bad_root
+        )
 
 
 def test_log_request_endpoint_field_round_trips(tmp_path: Path):

@@ -18,6 +18,7 @@ Phases:
   reflect  - evaluate the result against expectations, log to tracer,
              flag any failures via FailureTag
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,12 +61,14 @@ class LoopController:
         started = time.monotonic()
 
         # OBSERVE
-        self._tracer.record({
-            "trace_id": trace_id,
-            "phase": "observe",
-            "observation_summary": _summarize(observation),
-            "ts": time.time(),
-        })
+        self._tracer.record(
+            {
+                "trace_id": trace_id,
+                "phase": "observe",
+                "observation_summary": _summarize(observation),
+                "ts": time.time(),
+            }
+        )
 
         # REASON  +  ACT (the engine's response IS the action)
         try:
@@ -86,13 +89,15 @@ class LoopController:
             }
             failure_tag = FailureTag.UNKNOWN
 
-        self._tracer.record({
-            "trace_id": trace_id,
-            "phase": "reason+act",
-            "decision_summary": _summarize_decision(decision),
-            "provider": self._engine.provider_name,
-            "ts": time.time(),
-        })
+        self._tracer.record(
+            {
+                "trace_id": trace_id,
+                "phase": "reason+act",
+                "decision_summary": _summarize_decision(decision),
+                "provider": self._engine.provider_name,
+                "ts": time.time(),
+            }
+        )
 
         # REFLECT
         elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -100,14 +105,16 @@ class LoopController:
         if reflection.get("flag") and failure_tag is None:
             failure_tag = reflection["flag"]
 
-        self._tracer.record({
-            "trace_id": trace_id,
-            "phase": "reflect",
-            "elapsed_ms": elapsed_ms,
-            "failure_tag": failure_tag.value if failure_tag else None,
-            "notes": reflection.get("notes", []),
-            "ts": time.time(),
-        })
+        self._tracer.record(
+            {
+                "trace_id": trace_id,
+                "phase": "reflect",
+                "elapsed_ms": elapsed_ms,
+                "failure_tag": failure_tag.value if failure_tag else None,
+                "notes": reflection.get("notes", []),
+                "ts": time.time(),
+            }
+        )
 
         decision["_trace_id"] = trace_id
         return decision

@@ -14,6 +14,7 @@ This means it's a guard for local dev and for CI configurations that
 explicitly check out `.shared` as a sibling — not a hard gate that
 breaks isolated runs.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -50,10 +51,7 @@ def test_vendored_schemas_match_shared_codegen():
         )
 
     vendored = (
-        Path(__file__).resolve().parent.parent
-        / "director_hub"
-        / "bridge"
-        / "_generated_schemas.py"
+        Path(__file__).resolve().parent.parent / "director_hub" / "bridge" / "_generated_schemas.py"
     )
     assert vendored.exists(), f"vendored schemas missing at {vendored}"
 
@@ -65,10 +63,7 @@ def test_vendored_schemas_match_shared_codegen():
         check=False,
     )
     if result.returncode != 0:
-        pytest.fail(
-            f"python_gen.py failed (returncode={result.returncode}): "
-            f"{result.stderr}"
-        )
+        pytest.fail(f"python_gen.py failed (returncode={result.returncode}): {result.stderr}")
 
     fresh = result.stdout
     vendored_text = vendored.read_text()
