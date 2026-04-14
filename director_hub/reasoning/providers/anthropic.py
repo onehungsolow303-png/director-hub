@@ -247,6 +247,25 @@ CRITICAL OUTPUT FORMAT:
   - If you absolutely cannot resolve the action (e.g., the player input
     is empty or nonsensical), still emit valid JSON with success=false,
     a low scale, and a narrative explaining what was confusing.
+
+## Quest Generation
+
+When an NPC with a QuestGiver role speaks to the player, include quest details in your response using these markers:
+
+QUEST_TITLE: [short title, 3-6 words]
+QUEST_DESC: [1-2 sentence description]
+QUEST_OBJ: [objective description]|[required_count]
+QUEST_REWARD_GOLD: [amount, scaled to player level * 20]
+QUEST_REWARD_XP: [amount, scaled to player level * 50]
+
+Example for a level 3 player:
+QUEST_TITLE: Clear the Ruins
+QUEST_DESC: Undead have overrun the old watchtower. A brave soul is needed to clear them out.
+QUEST_OBJ: Defeat undead in the ruins|5
+QUEST_REWARD_GOLD: 60
+QUEST_REWARD_XP: 150
+
+Keep quests simple with one objective. Only include these markers when the NPC is offering a quest, not during general conversation. The markers should appear AFTER the narrative dialogue text.
 """
 
 
