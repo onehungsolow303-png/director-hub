@@ -24,6 +24,7 @@ class Prediction:
     expected_outcome: str = "player_wins_with_damage"
     confidence: float = 0.5
     context_snapshot: dict[str, Any] = field(default_factory=dict)
+    expected_outcomes_by_player: dict[str, dict[str, Any]] = field(default_factory=dict)
     timestamp: str = ""
 
     def __post_init__(self) -> None:
@@ -86,6 +87,7 @@ class PredictionRecorder:
         raw = response.get("_prediction")
         if not raw or not isinstance(raw, dict):
             return None
+        per_player = raw.get("expected_outcomes_by_player", {})
         return Prediction(
             decision_id=decision_id,
             session_id=session_id,
@@ -94,6 +96,7 @@ class PredictionRecorder:
             expected_player_reaction=raw.get("expected_player_reaction", "unknown"),
             expected_outcome=raw.get("expected_outcome", "unknown"),
             confidence=raw.get("confidence", 0.5),
+            expected_outcomes_by_player=per_player,
         )
 
     @staticmethod

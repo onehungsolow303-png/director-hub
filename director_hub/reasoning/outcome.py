@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from director_hub.reasoning.prediction import Prediction
 
@@ -16,6 +17,7 @@ class OutcomeData:
     content_skipped: bool = False
     session_ended: bool = False
     time_spent_seconds: float = 0.0
+    party_outcomes: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass

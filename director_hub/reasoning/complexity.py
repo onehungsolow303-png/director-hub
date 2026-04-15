@@ -49,6 +49,14 @@ def assess_complexity(action_request: dict) -> ComplexityResult:
         score += 1
         signals.append("unsafe_location")
 
+    party = action_request.get("party") or []
+    if len(party) > 1:
+        score += 1
+        signals.append("party_present")
+    if len(party) >= 4:
+        score += 1
+        signals.append("large_party")
+
     if score >= 4:
         level = "high"
     elif score >= 2:

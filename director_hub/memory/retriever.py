@@ -23,6 +23,7 @@ class MemoryRetriever:
         action_request: dict[str, Any],
         session_id: str,
         token_budget: int,
+        player_id: str = "",
     ) -> str:
         """Build the ## Director Memory block for system prompt injection."""
         budget_chars = token_budget * _CHARS_PER_TOKEN
@@ -34,6 +35,8 @@ class MemoryRetriever:
         if rules:
             lines = ["### Rules (things you know to be true)"]
             for key, value in rules.items():
+                if player_id and key.startswith("player_") and player_id not in key:
+                    continue
                 line = f"- **{key}**: {value}"
                 lines.append(line)
             rule_block = "\n".join(lines)

@@ -87,13 +87,21 @@ def _interpret_with_logging(endpoint: str, req: ActionRequest) -> DecisionPayloa
 
     session_id = payload.get("session_id", "default")
 
+    party = payload.get("party") or []
+    primary_player_id = party[0]["player_id"] if party else payload.get("actor_id", "player")  # noqa: F841 — wired in Task 5
+
     # Compare previous prediction against this request's outcome
     prev_prediction = _predictions.get_latest(session_id)
     if prev_prediction:
         actor = payload.get("actor_stats") or {}
         max_hp = max(actor.get("max_hp", 1), 1)
         hp_pct = actor.get("hp", max_hp) / max_hp
-        outcome = OutcomeData(player_hp_pct_after=hp_pct)
+        party_outcomes = {}
+        for pm in party:
+            pid = pm.get("player_id", "")
+            pm_max = max(pm.get("max_hp", 1), 1)
+            party_outcomes[pid] = {"hp_pct_after": pm.get("hp", pm_max) / pm_max}
+        outcome = OutcomeData(player_hp_pct_after=hp_pct, party_outcomes=party_outcomes)
         comparison = compare_outcome(prev_prediction, outcome)
         if comparison.should_store:
             _reflector.reflect(
