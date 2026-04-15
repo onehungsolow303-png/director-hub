@@ -1,16 +1,16 @@
 {
   "id": "07_extra_field_rejected",
   "category": "robustness",
-  "description": "Request body carries an unknown field. Boundary must reject with 422 because action.schema.json has additionalProperties:false and the generated pydantic enforces extra='forbid'.",
+  "description": "Request body carries an unknown field. Since action.schema.json now has additionalProperties:true (for party/request_type extensibility), extra fields are silently ignored rather than rejected.",
   "input": {
     "schema_version": "1.0.0",
     "session_id": "eval-07",
     "actor_id": "player",
     "player_input": "I look around",
     "actor_stats": {"hp": 20, "max_hp": 20},
-    "_bogus_field": "should be rejected"
+    "_bogus_field": "should be silently ignored"
   },
   "expectations": {
-    "expected_status": 422
+    "expected_status": 200
   }
 }
