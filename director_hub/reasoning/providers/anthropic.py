@@ -352,6 +352,65 @@ class AnthropicProvider(ReasoningProvider):
             session_id = action_request.get("session_id", "default")
             memory_block = retriever.assemble(action_request, session_id, complexity.token_budget)
 
+        # Encounter selection for request_type=encounter
+        encounter_template_data: dict[str, Any] | None = None
+        if action_request.get("request_type") == "encounter" and self._memory_manager:
+            try:
+                from director_hub.content.encounter_designer import EncounterDesigner
+                from director_hub.content.encounter_selector import EncounterSelector
+                from director_hub.content.template_store import TemplateStore
+
+                store = TemplateStore(memory=self._memory_manager)
+                selector = EncounterSelector(store, self._memory_manager)
+
+                party = action_request.get("party") or []
+                if not party:
+                    actor = action_request.get("actor_stats") or {}
+                    party = [
+                        {
+                            "player_id": "player",
+                            "class": "fighter",
+                            "level": actor.get("level", 1),
+                        }
+                    ]
+
+                scene = action_request.get("scene_context") or {}
+                biome = scene.get("biome", "forest")
+                level = party[0].get("level", 1) if party else 1
+                xp_budget = 40 * level * max(len(party), 1)
+
+                selected = selector.select(
+                    biome=biome, party=party, xp_budget=xp_budget, scene_context=scene
+                )
+
+                if selected is None:
+                    designer = EncounterDesigner(store, self._memory_manager)
+                    gaps = store.gap_analysis(biomes=[biome])
+                    new_templates = designer.design(
+                        gaps=gaps,
+                        player_context={
+                            "level": level,
+                            "classes": [p.get("class", "") for p in party],
+                        },
+                        lessons=[],
+                        use_llm=False,
+                        max_new=1,
+                    )
+                    if new_templates:
+                        selected = new_templates[0]
+
+                if selected:
+                    encounter_template_data = {
+                        "template_id": selected.template_id,
+                        "name": selected.name,
+                        "slots": selected.slots,
+                        "gold_reward": max(10, sum(s.get("xp", 0) for s in selected.slots) // 5),
+                        "xp_reward": sum(s.get("xp", 0) for s in selected.slots),
+                    }
+                    store.record_usage(selected.template_id, outcome_quality=0.5)
+            except Exception:
+                logger.exception("Encounter selection failed, LLM will handle naturally")
+
         # Compose the system prompt. If the action_request's scene_context
         # carries an NPC persona, prepend a strong role-play frame on top
         # of the standard GM rules so the model treats the persona as a
@@ -389,7 +448,10 @@ class AnthropicProvider(ReasoningProvider):
             messages.append({"role": "assistant", "content": response.content})
 
             if response.stop_reason == "end_turn":
-                return self._parse_final(response, action_request)
+                result = self._parse_final(response, action_request)
+                if encounter_template_data:
+                    result["encounter_template"] = encounter_template_data
+                return result
 
             if response.stop_reason == "tool_use":
                 tool_results = self._dispatch_tools(response, session_id)

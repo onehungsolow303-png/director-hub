@@ -63,3 +63,16 @@ reflection:
   inline_max_tokens: 200
   session_review_model: claude-sonnet-4-6
   session_review_max_tokens: 1000
+
+encounters:
+  template_dir: "C:/Dev/.shared/state/encounter_templates"
+  max_generated_templates: 100
+  min_selection_score: 0.3
+  prune_confidence_threshold: 0.3
+  prune_min_uses: 3
+  between_session_max_new: 3
+  scoring_weights:
+    party_composition: 0.3
+    narrative_connection: 0.25
+    memory_informed: 0.25
+    freshness: 0.2

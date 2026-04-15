@@ -25,6 +25,7 @@ from director_hub.bridge.schemas import (
     SessionStartRequest,
     SessionStartResponse,
 )
+from director_hub.content.template_store import TemplateStore
 from director_hub.memory.manager import MemoryManager
 from director_hub.observability.request_log import log_request
 from director_hub.reasoning.engine import ReasoningEngine
@@ -39,6 +40,7 @@ _engine = ReasoningEngine(memory_manager=_memory)
 _predictions = PredictionRecorder()
 _reflector = InlineReflector(_memory)
 _session_reviewer = SessionReviewer(_memory)
+_template_store = TemplateStore(memory=_memory)
 
 
 @app.get("/health")

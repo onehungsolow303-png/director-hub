@@ -68,6 +68,34 @@ class SessionReviewer:
                         promotions.append({"key": key, "value": text, "confirmations": count})
                         log.info("Promoted lesson to rule: %s", key)
 
+        # Encounter design pass: generate templates to fill gaps
+        try:
+            from director_hub.content.encounter_designer import EncounterDesigner
+            from director_hub.content.template_store import TemplateStore
+
+            store = TemplateStore(memory=self._mgr)
+            likely_biomes: list[str] = []
+            intentions = self._mgr.semantic.get("_next_session_intentions") or []
+            if isinstance(intentions, list):
+                for intent in intentions:
+                    for biome in ("forest", "swamp", "dungeon", "plains", "ruins", "castle"):
+                        if biome in str(intent).lower():
+                            likely_biomes.append(biome)
+
+            gaps = store.gap_analysis(biomes=likely_biomes)
+            if gaps.get("missing_biomes"):
+                designer = EncounterDesigner(store, self._mgr)
+                new_templates = designer.design(
+                    gaps=gaps,
+                    player_context={},
+                    lessons=new_entries,
+                    use_llm=False,
+                )
+                if new_templates:
+                    summary_parts.append(f"{len(new_templates)} encounter templates generated")
+        except Exception:
+            log.exception("Encounter design pass failed")
+
         session_summary = "; ".join(summary_parts) if summary_parts else "Routine session"
 
         return {
@@ -152,10 +180,51 @@ class SessionReviewer:
                     "_next_session_intentions", parsed["next_session_intentions"]
                 )
 
+            # Encounter design pass: generate templates to fill gaps
+            new_entries: list[str] = parsed.get("new_lessons", [])
+            summary_parts: list[str] = []
+            try:
+                from director_hub.content.encounter_designer import EncounterDesigner
+                from director_hub.content.template_store import TemplateStore
+
+                store = TemplateStore(memory=self._mgr)
+                likely_biomes: list[str] = []
+                intentions = self._mgr.semantic.get("_next_session_intentions") or []
+                if isinstance(intentions, list):
+                    for intent in intentions:
+                        for biome in (
+                            "forest",
+                            "swamp",
+                            "dungeon",
+                            "plains",
+                            "ruins",
+                            "castle",
+                        ):
+                            if biome in str(intent).lower():
+                                likely_biomes.append(biome)
+
+                gaps = store.gap_analysis(biomes=likely_biomes)
+                if gaps.get("missing_biomes"):
+                    designer = EncounterDesigner(store, self._mgr)
+                    new_templates = designer.design(
+                        gaps=gaps,
+                        player_context={},
+                        lessons=new_entries,
+                        use_llm=False,
+                    )
+                    if new_templates:
+                        summary_parts.append(f"{len(new_templates)} encounter templates generated")
+            except Exception:
+                log.exception("Encounter design pass failed")
+
+            session_summary = parsed.get("session_summary", "")
+            if summary_parts:
+                session_summary += "; " + "; ".join(summary_parts)
+
             return {
                 "session_id": session_id,
                 "events_reviewed": len(events),
-                "session_summary": parsed.get("session_summary", ""),
+                "session_summary": session_summary,
                 "llm_used": True,
                 **{k: v for k, v in parsed.items() if k != "session_summary"},
             }
