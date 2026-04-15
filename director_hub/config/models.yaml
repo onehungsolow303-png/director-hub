@@ -48,3 +48,18 @@ active: anthropic
 # See providers/record_replay.py for the full mechanism.
 replay_mode: live
 cassette_dir: evals/cassettes
+
+memory:
+  injection_budget:
+    low: 500
+    medium: 1500
+    high: 3000
+  promotion_threshold: 3
+  max_semantic_rules: 200
+  max_journal_entries: 1000
+
+reflection:
+  inline_model: claude-haiku-4-5
+  inline_max_tokens: 200
+  session_review_model: claude-sonnet-4-6
+  session_review_max_tokens: 1000

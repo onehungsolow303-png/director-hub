@@ -44,10 +44,15 @@ _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "mode
 
 class ReasoningEngine:
     def __init__(
-        self, config: dict[str, Any] | None = None, config_path: Path | None = None
+        self,
+        config: dict[str, Any] | None = None,
+        config_path: Path | None = None,
+        memory_manager: Any = None,
     ) -> None:
         self.config = config or _load_config(config_path or _DEFAULT_CONFIG_PATH)
-        self._provider: ReasoningProvider = _build_provider(self.config)
+        self._provider: ReasoningProvider = _build_provider(
+            self.config, memory_manager=memory_manager
+        )
         # Wrap in RecordReplayProvider when replay_mode != live so the
         # eval suite can capture and replay byte-identical responses
         # without re-hitting the live LLM. The wrap is no-op in live mode.
@@ -113,7 +118,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         return {"providers": [{"name": "stub"}], "active": "stub"}
 
 
-def _build_provider(config: dict[str, Any]) -> ReasoningProvider:
+def _build_provider(config: dict[str, Any], memory_manager: Any = None) -> ReasoningProvider:
     """Resolve the active provider name to a ReasoningProvider instance.
 
     Falls back to StubProvider on any failure (missing SDK, missing key,
@@ -136,6 +141,7 @@ def _build_provider(config: dict[str, Any]) -> ReasoningProvider:
             return AnthropicProvider(
                 model=active_cfg.get("model", "claude-sonnet-4-5"),
                 max_tokens=int(active_cfg.get("max_tokens", 1024)),
+                memory_manager=memory_manager,
             )
         except ProviderUnavailable as e:
             logger.warning(f"[ReasoningEngine] anthropic provider unavailable: {e}. Using stub.")

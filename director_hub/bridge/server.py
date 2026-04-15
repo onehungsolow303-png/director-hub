@@ -25,12 +25,20 @@ from director_hub.bridge.schemas import (
     SessionStartRequest,
     SessionStartResponse,
 )
+from director_hub.memory.manager import MemoryManager
 from director_hub.observability.request_log import log_request
 from director_hub.reasoning.engine import ReasoningEngine
+from director_hub.reasoning.prediction import PredictionRecorder
+from director_hub.reasoning.reflector import InlineReflector
+from director_hub.reasoning.session_review import SessionReviewer
 from director_hub.toolbelt.game_state_tool import remember_request
 
 app = FastAPI(title="Director Hub", version=__version__)
-_engine = ReasoningEngine()
+_memory = MemoryManager(persist=True)
+_engine = ReasoningEngine(memory_manager=_memory)
+_predictions = PredictionRecorder()
+_reflector = InlineReflector(_memory)
+_session_reviewer = SessionReviewer(_memory)
 
 
 @app.get("/health")
@@ -68,12 +76,43 @@ def _interpret_with_logging(endpoint: str, req: ActionRequest) -> DecisionPayloa
     reasoning engine, and emit a structured per-request log line so
     bad responses can be debugged after the fact (see
     observability/request_log.py for the schema).
+
+    Also handles prediction recording and outcome comparison for the
+    memory-driven learning pipeline.
     """
+    from director_hub.reasoning.outcome import OutcomeData, compare_outcome
+
     payload = req.model_dump()
     remember_request(payload)
-    started = time.monotonic()
+
+    session_id = payload.get("session_id", "default")
+
+    # Compare previous prediction against this request's outcome
+    prev_prediction = _predictions.get_latest(session_id)
+    if prev_prediction:
+        actor = payload.get("actor_stats") or {}
+        max_hp = max(actor.get("max_hp", 1), 1)
+        hp_pct = actor.get("hp", max_hp) / max_hp
+        outcome = OutcomeData(player_hp_pct_after=hp_pct)
+        comparison = compare_outcome(prev_prediction, outcome)
+        if comparison.should_store:
+            _reflector.reflect(
+                comparison,
+                decision_summary=str(prev_prediction.context_snapshot),
+                use_llm=False,
+            )
+
+    t0 = time.monotonic()
     result = _engine.interpret(payload)
-    latency_ms = int((time.monotonic() - started) * 1000)
+    latency_ms = (time.monotonic() - t0) * 1000
+
+    # Extract and store prediction
+    decision_id = str(uuid.uuid4())
+    pred = PredictionRecorder.extract_from_response(result, session_id, decision_id)
+    if pred:
+        _predictions.record(pred)
+    result = PredictionRecorder.strip_from_response(result)
+
     log_request(endpoint, payload, result, latency_ms)
     return DecisionPayload(**result)
 
@@ -91,3 +130,11 @@ def dialogue(req: ActionRequest) -> DecisionPayload:
 @app.post("/quest", response_model=DecisionPayload)
 def quest(req: ActionRequest) -> DecisionPayload:
     return _interpret_with_logging("/quest", req)
+
+
+@app.post("/session/end")
+def session_end(req: dict) -> dict:
+    """Trigger deep session review on save/quit."""
+    session_id = req.get("session_id", "default")
+    result = _session_reviewer.review(session_id=session_id, use_llm=False)
+    return result

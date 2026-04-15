@@ -266,6 +266,17 @@ QUEST_REWARD_GOLD: 60
 QUEST_REWARD_XP: 150
 
 Keep quests simple with one objective. Only include these markers when the NPC is offering a quest, not during general conversation. The markers should appear AFTER the narrative dialogue text.
+
+## Self-Evaluation
+
+Include a `_prediction` field in your JSON response with your expected outcome:
+"_prediction": {
+    "expected_difficulty": "easy|medium|hard|deadly",
+    "expected_player_reaction": "engage_combat|negotiate|flee|explore|ignore",
+    "expected_outcome": "player_wins_easily|player_wins_with_damage|player_struggles|player_loses",
+    "confidence": 0.0-1.0
+}
+This helps you learn from your decisions. Be honest about your confidence level.
 """
 
 
@@ -277,6 +288,7 @@ class AnthropicProvider(ReasoningProvider):
         model: str = "claude-sonnet-4-5",
         max_tokens: int = 1024,
         max_tool_iterations: int = 8,
+        **kwargs: Any,
     ) -> None:
         try:
             import anthropic
@@ -310,6 +322,12 @@ class AnthropicProvider(ReasoningProvider):
         self._registry.register(GameStateTool())
         self._tool_schemas = _build_tool_schemas()
 
+        self._memory_manager = kwargs.get("memory_manager")
+        if self._memory_manager:
+            from director_hub.toolbelt.memory_tool import MemoryTool
+
+            self._registry.register(MemoryTool(self._memory_manager))
+
     def interpret(self, action_request: dict[str, Any]) -> dict[str, Any]:
         # Cache the request payload so GameStateTool can answer with the
         # latest engine-sent state when Forever engine's GameStateServer
@@ -324,11 +342,21 @@ class AnthropicProvider(ReasoningProvider):
         # effect when the token actually changed.
         self._refresh_client_if_token_rotated()
 
+        memory_block = ""
+        if self._memory_manager:
+            from director_hub.memory.retriever import MemoryRetriever
+            from director_hub.reasoning.complexity import assess_complexity
+
+            complexity = assess_complexity(action_request)
+            retriever = MemoryRetriever(self._memory_manager)
+            session_id = action_request.get("session_id", "default")
+            memory_block = retriever.assemble(action_request, session_id, complexity.token_budget)
+
         # Compose the system prompt. If the action_request's scene_context
         # carries an NPC persona, prepend a strong role-play frame on top
         # of the standard GM rules so the model treats the persona as a
         # hard constraint, not a suggestion buried in the user payload.
-        system_prompt = _compose_system_prompt(action_request)
+        system_prompt = _compose_system_prompt(action_request, memory_block=memory_block)
 
         user_payload = json.dumps(
             {
@@ -493,7 +521,7 @@ class AnthropicProvider(ReasoningProvider):
         return decision
 
 
-def _compose_system_prompt(action_request: dict[str, Any]) -> str:
+def _compose_system_prompt(action_request: dict[str, Any], memory_block: str = "") -> str:
     """Build the system prompt for one /interpret_action or /dialogue call.
 
     If the action_request's scene_context carries NPC persona data, prepend
@@ -506,10 +534,14 @@ def _compose_system_prompt(action_request: dict[str, Any]) -> str:
 
     Returns the standard GM prompt unchanged when no persona is present.
     """
+    base = _SYSTEM_PROMPT
+    if memory_block:
+        base = memory_block + "\n\n" + base
+
     scene = action_request.get("scene_context") or {}
     persona = scene.get("npc_persona")
     if not persona:
-        return _SYSTEM_PROMPT
+        return base
 
     name = scene.get("npc_name") or "the NPC"
     role = scene.get("npc_role") or ""
@@ -585,7 +617,7 @@ def _compose_system_prompt(action_request: dict[str, Any]) -> str:
         "\n"
     )
 
-    return role_block + _SYSTEM_PROMPT
+    return role_block + base
 
 
 def _extract_json_object(raw: str) -> dict[str, Any] | None:
