@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -28,19 +29,35 @@ from director_hub.bridge.schemas import (
 from director_hub.content.template_store import TemplateStore
 from director_hub.memory.manager import MemoryManager
 from director_hub.observability.request_log import log_request
+from director_hub.project_tracker import router as project_tracker_router
+from director_hub.project_tracker import start_tracker, stop_tracker
 from director_hub.reasoning.engine import ReasoningEngine
 from director_hub.reasoning.prediction import PredictionRecorder
 from director_hub.reasoning.reflector import InlineReflector
 from director_hub.reasoning.session_review import SessionReviewer
 from director_hub.toolbelt.game_state_tool import remember_request
 
-app = FastAPI(title="Director Hub", version=__version__)
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Kick off the 15-min/1-hr project state scanner so /project-state
+    # endpoints serve live data as soon as the first scan completes.
+    start_tracker()
+    try:
+        yield
+    finally:
+        await stop_tracker()
+
+
+app = FastAPI(title="Director Hub", version=__version__, lifespan=_lifespan)
 _memory = MemoryManager(persist=True)
 _engine = ReasoningEngine(memory_manager=_memory)
 _predictions = PredictionRecorder()
 _reflector = InlineReflector(_memory)
 _session_reviewer = SessionReviewer(_memory)
 _template_store = TemplateStore(memory=_memory)
+
+app.include_router(project_tracker_router)
 
 
 @app.get("/health")
