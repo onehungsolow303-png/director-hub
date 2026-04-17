@@ -20,6 +20,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from director_hub import __version__
+from director_hub.boot import router as boot_router  # noqa: E402
+from director_hub.boot.routes import init as init_boot  # noqa: E402
 from director_hub.bridge.schemas import (
     ActionRequest,
     DecisionPayload,
@@ -29,6 +31,7 @@ from director_hub.bridge.schemas import (
 from director_hub.content.template_store import TemplateStore
 from director_hub.memory.manager import MemoryManager
 from director_hub.observability.request_log import log_request
+from director_hub.persistence.game_store import GameStore  # noqa: E402
 from director_hub.project_tracker import router as project_tracker_router
 from director_hub.project_tracker import start_tracker, stop_tracker
 from director_hub.reasoning.engine import ReasoningEngine
@@ -40,12 +43,11 @@ from director_hub.toolbelt.game_state_tool import remember_request
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    # Kick off the 15-min/1-hr project state scanner so /project-state
-    # endpoints serve live data as soon as the first scan completes.
     start_tracker()
     try:
         yield
     finally:
+        _game_store.close()
         await stop_tracker()
 
 
@@ -56,8 +58,13 @@ _predictions = PredictionRecorder()
 _reflector = InlineReflector(_memory)
 _session_reviewer = SessionReviewer(_memory)
 _template_store = TemplateStore(memory=_memory)
+_game_store = GameStore()
+
+# Inject dependencies into boot routes
+init_boot(_game_store, _memory)
 
 app.include_router(project_tracker_router)
+app.include_router(boot_router)
 
 
 @app.get("/health")
@@ -68,13 +75,15 @@ def health() -> dict[str, str]:
 @app.post("/session/start", response_model=SessionStartResponse)
 def session_start(req: SessionStartRequest) -> SessionStartResponse:
     sid = str(uuid.uuid4())
+
+    # Register this game session in the durable store
+    player_id = "player_1"  # TODO: extract from req when multiplayer lands
+    _game_store.start_session(player_id=player_id, save_snapshot=req.model_dump(), session_id=sid)
+
     # Explicit defaults for the optional list/int fields. The pydantic
     # generated_schemas defaults them to None, which serializes as JSON
     # null, which C# Newtonsoft cannot deserialize into a non-nullable
-    # int / List<T>. The Forever engine GameManager.StartDirectorSession
-    # was silently failing on this null and falling back to "no-session"
-    # for every session, which broke memory anchoring + NPC continuity.
-    # See engine commit f460cd1 for the C# side.
+    # int / List<T>.
     opening = DecisionPayload(
         session_id=sid,
         success=True,
@@ -107,7 +116,15 @@ def _interpret_with_logging(endpoint: str, req: ActionRequest) -> DecisionPayloa
     session_id = payload.get("session_id", "default")
 
     party = payload.get("party") or []
-    primary_player_id = party[0]["player_id"] if party else payload.get("actor_id", "player")  # noqa: F841 — wired in Task 5
+    primary_player_id = party[0]["player_id"] if party else payload.get("actor_id", "player")
+
+    # Record event in durable game store
+    event_id = _game_store.record_event(
+        session_id=session_id,
+        player_id=primary_player_id,
+        event_type="action",
+        payload=payload,
+    )
 
     # Compare previous prediction against this request's outcome
     prev_prediction = _predictions.get_latest(session_id)
@@ -140,6 +157,15 @@ def _interpret_with_logging(endpoint: str, req: ActionRequest) -> DecisionPayloa
         _predictions.record(pred)
     result = PredictionRecorder.strip_from_response(result)
 
+    # Record decision in durable game store
+    _game_store.record_decision(
+        session_id=session_id,
+        event_id=event_id,
+        request=payload,
+        response=result,
+        prediction=pred.model_dump() if pred else None,
+    )
+
     log_request(endpoint, payload, result, latency_ms)
     return DecisionPayload(**result)
 
@@ -161,7 +187,11 @@ def quest(req: ActionRequest) -> DecisionPayload:
 
 @app.post("/session/end")
 def session_end(req: dict) -> dict:
-    """Trigger deep session review on save/quit."""
+    """Trigger deep session review on save/quit and close the game session."""
     session_id = req.get("session_id", "default")
+
+    # Mark session completed in durable store
+    _game_store.end_session(session_id)
+
     result = _session_reviewer.review(session_id=session_id, use_llm=False)
     return result

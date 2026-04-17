@@ -7,6 +7,8 @@ later without touching git scanner).
 
 from __future__ import annotations
 
+import json
+import sqlite3
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -38,6 +40,9 @@ SERVICES = {
 
 UNITY_BUILD_LOG = Path("C:/Dev/unity_build.log")
 MEMORY_DIR = Path.home() / ".claude" / "projects" / "C--Dev" / "memory"
+HISTORY_JSONL = Path.home() / ".claude" / "history.jsonl"
+TRANSCRIPT_DIR = Path.home() / ".claude" / "projects" / "C--Dev"
+CLAUDE_MEM_DB = Path.home() / ".claude-mem" / "claude-mem.db"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -223,6 +228,160 @@ def scan_tests() -> dict[str, Any]:
     return out
 
 
+def scan_transcripts(project_filter: str = "C:\\Dev") -> dict[str, Any]:
+    """Read Claude Code history.jsonl + session file inventory for this project."""
+    if not HISTORY_JSONL.exists():
+        return {"available": False}
+
+    # Parse history.jsonl — one JSON object per line
+    recent_prompts: list[dict[str, Any]] = []
+    total_prompts = 0
+    try:
+        with HISTORY_JSONL.open("r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("project") != project_filter:
+                    continue
+                total_prompts += 1
+                recent_prompts.append(
+                    {
+                        "display": (entry.get("display") or "")[:120],
+                        "timestamp": datetime.fromtimestamp(
+                            entry.get("timestamp", 0) / 1000, tz=UTC
+                        ).isoformat(),
+                        "session_id": entry.get("sessionId", ""),
+                    }
+                )
+    except OSError:
+        return {"available": False}
+
+    # Keep last 20 (newest first) — file is chronological so take tail
+    recent_prompts = recent_prompts[-20:]
+    recent_prompts.reverse()
+
+    # Session file inventory
+    session_files: list[dict[str, Any]] = []
+    total_size = 0
+    if TRANSCRIPT_DIR.exists():
+        for p in TRANSCRIPT_DIR.glob("*.jsonl"):
+            try:
+                st = p.stat()
+                total_size += st.st_size
+                session_files.append(
+                    {
+                        "name": p.name,
+                        "mtime": datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(),
+                        "size_bytes": st.st_size,
+                    }
+                )
+            except OSError:
+                continue
+    session_files.sort(key=lambda d: d["mtime"], reverse=True)
+
+    return {
+        "available": True,
+        "history_file": str(HISTORY_JSONL),
+        "total_prompts": total_prompts,
+        "recent_prompts": recent_prompts,
+        "session_files": {
+            "count": len(session_files),
+            "total_size_bytes": total_size,
+            "recent": session_files[:5],
+        },
+    }
+
+
+def scan_claude_mem(
+    project_filter: tuple[str, ...] = ("Dev", "C--Dev"),
+) -> dict[str, Any]:
+    """Read claude-mem SQLite DB (read-only) for session summaries, observations, prompts."""
+    if not CLAUDE_MEM_DB.exists():
+        return {"available": False}
+
+    db_uri = f"file:{CLAUDE_MEM_DB.as_posix()}?mode=ro"
+    try:
+        con = sqlite3.connect(db_uri, uri=True, timeout=5)
+        con.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        return {"available": False, "db_path": str(CLAUDE_MEM_DB)}
+
+    placeholders = ",".join("?" for _ in project_filter)
+
+    try:
+        cur = con.cursor()
+
+        # Last 3 session summaries
+        cur.execute(
+            f"SELECT request, investigated, learned, completed, next_steps, created_at "
+            f"FROM session_summaries WHERE project IN ({placeholders}) "
+            f"ORDER BY created_at_epoch DESC LIMIT 3",
+            project_filter,
+        )
+        session_summaries = [
+            {
+                "request": r["request"] or "",
+                "investigated": (r["investigated"] or "")[:500],
+                "learned": (r["learned"] or "")[:500],
+                "completed": (r["completed"] or "")[:500],
+                "next_steps": (r["next_steps"] or "")[:300],
+                "created_at": r["created_at"] or "",
+            }
+            for r in cur.fetchall()
+        ]
+
+        # Last 10 observations
+        cur.execute(
+            f"SELECT type, title, subtitle, created_at "
+            f"FROM observations WHERE project IN ({placeholders}) "
+            f"ORDER BY created_at_epoch DESC LIMIT 10",
+            project_filter,
+        )
+        observations = [
+            {
+                "type": r["type"] or "",
+                "title": r["title"] or "",
+                "subtitle": (r["subtitle"] or "")[:200],
+                "created_at": r["created_at"] or "",
+            }
+            for r in cur.fetchall()
+        ]
+
+        # Last 20 user prompts
+        cur.execute(
+            f"SELECT prompt_text, created_at "
+            f"FROM user_prompts WHERE content_session_id IN "
+            f"(SELECT content_session_id FROM sdk_sessions WHERE project IN ({placeholders})) "
+            f"ORDER BY created_at_epoch DESC LIMIT 20",
+            project_filter,
+        )
+        recent_prompts = [
+            {
+                "prompt_text": (r["prompt_text"] or "")[:120],
+                "created_at": r["created_at"] or "",
+            }
+            for r in cur.fetchall()
+        ]
+    except sqlite3.Error:
+        con.close()
+        return {"available": False, "db_path": str(CLAUDE_MEM_DB)}
+    finally:
+        con.close()
+
+    return {
+        "available": True,
+        "db_path": str(CLAUDE_MEM_DB),
+        "session_summaries": session_summaries,
+        "observations": observations,
+        "recent_prompts": recent_prompts,
+    }
+
+
 def full_scan() -> dict[str, Any]:
     """One full project-state snapshot. ~1-2 seconds wall clock."""
     started = time.monotonic()
@@ -233,6 +392,8 @@ def full_scan() -> dict[str, Any]:
         "services": scan_services(),
         "tests": scan_tests(),
         "memory": scan_memory(),
+        "transcripts": scan_transcripts(),
+        "claude_mem": scan_claude_mem(),
         "builds": {"last_unity_build": scan_unity_build()},
     }
     for name, repo in REPOS.items():

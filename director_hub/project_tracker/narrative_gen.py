@@ -111,6 +111,68 @@ def render(snapshot: dict[str, Any]) -> str:
                 lines.append(f"  - `{s.get('name')}` ({s.get('mtime')})")
         lines.append("")
 
+    # Transcripts
+    transcripts = snapshot.get("transcripts", {})
+    if transcripts.get("available"):
+        lines.append("## Recent Claude Code Activity")
+        lines.append("")
+        sf = transcripts.get("session_files", {})
+        total_mb = sf.get("total_size_bytes", 0) / 1_048_576
+        lines.append(f"- {sf.get('count', 0)} session transcripts ({total_mb:.1f} MB total)")
+        lines.append(
+            f"- {transcripts.get('total_prompts', 0)} prompts in history (C:\\Dev project)"
+        )
+        recent_sessions = sf.get("recent", [])
+        if recent_sessions:
+            lines.append(f"- Most recent session: {recent_sessions[0].get('mtime', '?')}")
+        lines.append("")
+        prompts = transcripts.get("recent_prompts", [])
+        if prompts:
+            lines.append("Last 20 prompts (newest first):")
+            for p in prompts:
+                ts = p.get("timestamp", "")[:16]  # YYYY-MM-DDTHH:MM
+                display = p.get("display", "")
+                lines.append(f"- [{ts}] {display}")
+            lines.append("")
+
+    # Claude-Mem
+    cmem = snapshot.get("claude_mem", {})
+    if cmem.get("available"):
+        lines.append("## Claude-Mem Memory")
+        lines.append("")
+
+        summaries = cmem.get("session_summaries", [])
+        if summaries:
+            lines.append(f"### Recent session summaries (last {len(summaries)})")
+            lines.append("")
+            for s in summaries:
+                lines.append(f"**Session {s.get('created_at', '?')[:16]}:**")
+                if s.get("request"):
+                    lines.append(f"- **Request:** {s['request']}")
+                if s.get("learned"):
+                    lines.append(f"- **Learned:** {s['learned']}")
+                if s.get("completed"):
+                    lines.append(f"- **Completed:** {s['completed']}")
+                if s.get("next_steps"):
+                    lines.append(f"- **Next steps:** {s['next_steps']}")
+                lines.append("")
+
+        obs = cmem.get("observations", [])
+        if obs:
+            lines.append(f"### Recent observations (last {len(obs)})")
+            for o in obs:
+                ts = o.get("created_at", "")[:10]
+                lines.append(f"- [{o.get('type', '?')}] {o.get('title', '?')} ({ts})")
+            lines.append("")
+
+        cmem_prompts = cmem.get("recent_prompts", [])
+        if cmem_prompts:
+            lines.append(f"### Recent prompts (last {len(cmem_prompts)})")
+            for p in cmem_prompts:
+                ts = p.get("created_at", "")[:16]
+                lines.append(f"- [{ts}] {p.get('prompt_text', '')}")
+            lines.append("")
+
     # Tests
     tests = snapshot.get("tests", {})
     if tests:
