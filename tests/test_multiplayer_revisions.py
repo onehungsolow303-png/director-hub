@@ -76,3 +76,41 @@ def test_retriever_accepts_player_id():
     assert "global_rule" in block
     # Should NOT contain p2's player-specific rules
     assert "player_p2_style" not in block
+
+
+def test_episodic_retrieval_prioritizes_player_events():
+    mgr = MemoryManager(persist=False)
+    # Record events for two players and one party-wide event
+    for i in range(3):
+        mgr.episodic.record(
+            {
+                "session_id": "s1",
+                "player_id": "alice",
+                "type": "alice_action",
+                "summary": f"alice did thing {i}",
+            }
+        )
+    for i in range(3):
+        mgr.episodic.record(
+            {
+                "session_id": "s1",
+                "player_id": "bob",
+                "type": "bob_action",
+                "summary": f"bob did thing {i}",
+            }
+        )
+
+    retriever = MemoryRetriever(mgr)
+    block = retriever.assemble(
+        action_request={"scene_context": {}, "actor_stats": {}},
+        session_id="s1",
+        token_budget=2000,
+        player_id="alice",
+    )
+    # Alice's events must appear
+    assert "alice_action" in block
+    # Bob's events should be reduced — with 3 alice + 3 bob and max 5 total,
+    # alice gets up to 3 slots, leaving 1 slot for bob (floor((5-3)/2)=1)
+    alice_count = block.count("alice_action")
+    bob_count = block.count("bob_action")
+    assert alice_count >= bob_count

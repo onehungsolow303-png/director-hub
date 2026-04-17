@@ -65,10 +65,19 @@ class MemoryRetriever:
                 sections.append("\n### Past Experience\nNo relevant memories found.")
 
         # 3. Episodic recent (current session, last 5 events)
+        # When a player_id is provided, prioritize that player's events while
+        # still including a reduced slice of party-wide events for context.
         remaining = budget_chars - used
         if remaining > 100:
             events = self._mgr.episodic.for_session(session_id)
-            recent = events[-5:] if events else []
+            if player_id and events:
+                player_events = [e for e in events if e.get("player_id") == player_id]
+                other_events = [e for e in events if e.get("player_id") != player_id]
+                max_player = min(len(player_events), 5)
+                max_other = max(0, 5 - max_player) // 2
+                recent = player_events[-max_player:] + other_events[-max_other:]
+            else:
+                recent = events[-5:] if events else []
             if recent:
                 lines = ["\n### This Session"]
                 for ev in recent:

@@ -100,6 +100,19 @@ def compare_outcome(prediction: Prediction, outcome: OutcomeData) -> ComparisonR
             )
         )
 
+    if outcome.party_outcomes:
+        for pid, pdata in outcome.party_outcomes.items():
+            hp_pct = pdata.get("hp_pct_after", 1.0)
+            if hp_pct < 0.1 and prediction.expected_difficulty in ("easy", "medium"):
+                signals.append(
+                    Surprise(
+                        type="near_death_unexpected",
+                        expected=prediction.expected_difficulty,
+                        actual=f"player_{pid}_hp_at_{hp_pct:.0%}",
+                        significance="high",
+                    )
+                )
+
     should_store = len(surprises) > 0 or len(signals) > 0
 
     return ComparisonResult(
