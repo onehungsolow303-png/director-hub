@@ -46,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE TABLE IF NOT EXISTS decision_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL REFERENCES game_sessions(id),
+    player_id TEXT NOT NULL DEFAULT 'player_1',
     event_id INTEGER REFERENCES events(id),
     request_json TEXT NOT NULL,
     response_json TEXT NOT NULL,
@@ -72,10 +73,20 @@ class GameStore:
         self._con.execute("PRAGMA synchronous = NORMAL")
         self._con.execute("PRAGMA foreign_keys = ON")
         self._con.executescript(_SCHEMA)
+        self._migrate()
         self._con.commit()
 
     def close(self) -> None:
         self._con.close()
+
+    def _migrate(self) -> None:
+        """Apply incremental schema migrations for existing databases."""
+        try:
+            self._con.execute(
+                "ALTER TABLE decision_log ADD COLUMN player_id TEXT NOT NULL DEFAULT 'player_1'"
+            )
+        except Exception:
+            pass  # Column already exists
 
     # ------------------------------------------------------------------
     # Sessions
@@ -235,13 +246,15 @@ class GameStore:
         request: dict[str, Any],
         response: dict[str, Any],
         prediction: dict[str, Any] | None = None,
+        player_id: str = "player_1",
     ) -> int:
         """Record an LLM decision. Returns decision_id."""
         cur = self._con.execute(
-            "INSERT INTO decision_log (session_id, event_id, request_json, response_json, prediction_json) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO decision_log (session_id, player_id, event_id, request_json, response_json, prediction_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 session_id,
+                player_id,
                 event_id,
                 json.dumps(request, default=str),
                 json.dumps(response, default=str),

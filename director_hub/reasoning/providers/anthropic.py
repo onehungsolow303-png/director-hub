@@ -350,7 +350,11 @@ class AnthropicProvider(ReasoningProvider):
             complexity = assess_complexity(action_request)
             retriever = MemoryRetriever(self._memory_manager)
             session_id = action_request.get("session_id", "default")
-            memory_block = retriever.assemble(action_request, session_id, complexity.token_budget)
+            party = action_request.get("party") or []
+            player_id = party[0]["player_id"] if party else action_request.get("actor_id", "player")
+            memory_block = retriever.assemble(
+                action_request, session_id, complexity.token_budget, player_id=player_id
+            )
 
         # Encounter selection for request_type=encounter
         encounter_template_data: dict[str, Any] | None = None

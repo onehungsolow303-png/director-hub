@@ -140,6 +140,28 @@ class TestDecisionLog:
         assert len(decisions) == 1
         assert json.loads(decisions[0]["request_json"])["player_input"] == "attack"
 
+    def test_record_decision_stores_player_id(self, store: GameStore):
+        sid = store.start_session(player_id="alice_42")
+        eid = store.record_event(sid, "alice_42", "action", {"x": 1})
+        did = store.record_decision(
+            session_id=sid,
+            event_id=eid,
+            request={"x": 1},
+            response={"text": "ok"},
+            player_id="alice_42",
+        )
+        cur = store._con.execute("SELECT player_id FROM decision_log WHERE id = ?", (did,))
+        row = cur.fetchone()
+        assert row["player_id"] == "alice_42"
+
+    def test_record_decision_default_player_id(self, store: GameStore):
+        """Omitting player_id must default to 'player_1' for backward compatibility."""
+        sid = store.start_session(player_id="p1")
+        did = store.record_decision(session_id=sid, event_id=None, request={}, response={})
+        cur = store._con.execute("SELECT player_id FROM decision_log WHERE id = ?", (did,))
+        row = cur.fetchone()
+        assert row["player_id"] == "player_1"
+
     def test_update_outcome_and_lessons(self, store: GameStore):
         sid = store.start_session(player_id="p1")
         eid = store.record_event(sid, "p1", "action", {"input": "heal"})

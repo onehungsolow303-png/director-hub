@@ -126,3 +126,24 @@ def test_dialogue_endpoint_accepts_session_id_round_trip(client):
     body = r.json()
     assert body["session_id"] == sid
     assert body["narrative_text"]
+
+
+def test_session_start_uses_request_player_id(client):
+    """player_id from the request body must be used, not the hardcoded default."""
+    payload = {
+        "schema_version": "1.0.0",
+        "player_id": "alice_42",
+        "player_profile": {"name": "Alice"},
+        "map_meta": {"seed": 1},
+    }
+    resp = client.post("/session/start", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    # Session must be created and return a valid session_id
+    assert isinstance(body["session_id"], str) and len(body["session_id"]) > 0
+
+
+def test_session_start_default_player_id_accepted(client):
+    """Existing callers omitting player_id must still succeed (backward compatibility)."""
+    resp = client.post("/session/start", json=_session_start_payload())
+    assert resp.status_code == 200

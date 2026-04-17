@@ -77,7 +77,7 @@ def session_start(req: SessionStartRequest) -> SessionStartResponse:
     sid = str(uuid.uuid4())
 
     # Register this game session in the durable store
-    player_id = "player_1"  # TODO: extract from req when multiplayer lands
+    player_id = req.player_id
     _game_store.start_session(player_id=player_id, save_snapshot=req.model_dump(), session_id=sid)
 
     # Explicit defaults for the optional list/int fields. The pydantic
@@ -164,6 +164,7 @@ def _interpret_with_logging(endpoint: str, req: ActionRequest) -> DecisionPayloa
         request=payload,
         response=result,
         prediction=pred.model_dump() if pred else None,
+        player_id=primary_player_id,
     )
 
     log_request(endpoint, payload, result, latency_ms)

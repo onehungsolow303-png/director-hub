@@ -41,6 +41,7 @@ class SessionStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["1.0.0"] = "1.0.0"
+    player_id: str = "player_1"
     player_profile: dict[str, Any]
     map_meta: dict[str, Any]
 
