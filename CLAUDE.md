@@ -42,7 +42,7 @@ Python/FastAPI agentic AI brain for the Forever engine RPG. Runs on port 7802. T
 ```bash
 cd "C:/Dev/Director Hub"
 .venv/Scripts/python.exe -m pytest tests/ -q
-# 162 tests, ~6 seconds
+# 187 tests, ~85 seconds
 ```
 
 Golden eval runner:
