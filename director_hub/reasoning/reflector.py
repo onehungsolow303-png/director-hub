@@ -114,7 +114,7 @@ class InlineReflector:
                 max_tokens=200,
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = resp.content[0].text if resp.content else ""
+            text = getattr(resp.content[0], "text", "") if resp.content else ""
 
             from director_hub.reasoning.providers.anthropic import _extract_json_object
 
