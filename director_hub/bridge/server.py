@@ -24,6 +24,8 @@ from director_hub.boot import router as boot_router  # noqa: E402
 from director_hub.boot.routes import init as init_boot  # noqa: E402
 from director_hub.bridge.schemas import (
     ActionRequest,
+    ChunkGenerateRequest,
+    ChunkGenerateResponse,
     DecisionPayload,
     SessionStartRequest,
     SessionStartResponse,
@@ -196,3 +198,20 @@ def session_end(req: dict) -> dict:
 
     result = _session_reviewer.review(session_id=session_id, use_llm=False)
     return result
+
+
+@app.post("/chunk/generate", response_model=ChunkGenerateResponse)
+def chunk_generate(req: ChunkGenerateRequest) -> ChunkGenerateResponse:
+    from director_hub.content.chunk_generator import generate_chunk_content
+
+    result = generate_chunk_content(
+        chunk_x=req.chunk_x,
+        chunk_z=req.chunk_z,
+        biome=req.biome,
+        elevation=req.elevation,
+        temperature=req.temperature,
+        moisture=req.moisture,
+        distance_from_spawn=req.distance_from_spawn,
+        world_seed=req.world_seed,
+    )
+    return ChunkGenerateResponse(**result)

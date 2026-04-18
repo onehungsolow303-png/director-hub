@@ -54,3 +54,28 @@ class SessionStartResponse(BaseModel):
     schema_version: Literal["1.0.0"] = "1.0.0"
     session_id: str
     opening: DecisionPayload
+
+
+class ChunkGenerateRequest(BaseModel):
+    """Request for /chunk/generate — chunk metadata sent by the engine."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_x: int
+    chunk_z: int
+    biome: str
+    elevation: float = 0.5
+    temperature: float = 0.5
+    moisture: float = 0.5
+    distance_from_spawn: int = 0
+    world_seed: int = 42
+
+
+class ChunkGenerateResponse(BaseModel):
+    """Response from /chunk/generate — content placed in the chunk."""
+
+    structures: list[dict[str, Any]] = []
+    npcs: list[dict[str, Any]] = []
+    encounter_zones: list[dict[str, Any]] = []
+    points_of_interest: list[dict[str, Any]] = []
+    content_source: str = "director_hub"
