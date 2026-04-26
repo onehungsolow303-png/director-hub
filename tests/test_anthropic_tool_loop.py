@@ -3,7 +3,7 @@
 Mocks the anthropic SDK so these tests run without an API key, network,
 or token expiry concerns. Verifies:
 
-  1. Tool schemas are generated for all 4 toolbelt entries
+  1. Tool schemas are generated for all toolbelt entries
   2. The loop dispatches tool_use blocks to the registered tools
   3. tool_results are appended to the message history with correct shape
   4. session_id is auto-injected into game_state_read calls
@@ -58,7 +58,16 @@ def _response(stop_reason: str, content: list):
     return resp
 
 
-def test_provider_registers_all_four_tools(fake_anthropic_module, monkeypatch):
+EXPECTED_TOOLS = {
+    "dice_resolve",
+    "narrative_write",
+    "asset_request",
+    "game_state_read",
+    "atmospherics",
+}
+
+
+def test_provider_registers_all_tools(fake_anthropic_module, monkeypatch):
     fake_module, _ = fake_anthropic_module
     monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
     with patch.dict("sys.modules", {"anthropic": fake_module}):
@@ -66,7 +75,7 @@ def test_provider_registers_all_four_tools(fake_anthropic_module, monkeypatch):
 
         p = AnthropicProvider()
         names = {t.name for t in p._registry.all()}
-        assert names == {"dice_resolve", "narrative_write", "asset_request", "game_state_read"}
+        assert names == EXPECTED_TOOLS
 
 
 def test_tool_schemas_have_required_fields(fake_anthropic_module, monkeypatch):
@@ -77,12 +86,7 @@ def test_tool_schemas_have_required_fields(fake_anthropic_module, monkeypatch):
 
         p = AnthropicProvider()
         schemas_by_name = {s["name"]: s for s in p._tool_schemas}
-        assert set(schemas_by_name.keys()) == {
-            "dice_resolve",
-            "narrative_write",
-            "asset_request",
-            "game_state_read",
-        }
+        assert set(schemas_by_name.keys()) == EXPECTED_TOOLS
         # Each must have description + input_schema with type=object
         for _name, schema in schemas_by_name.items():
             assert schema["description"]
@@ -91,6 +95,11 @@ def test_tool_schemas_have_required_fields(fake_anthropic_module, monkeypatch):
         assert "spec" in schemas_by_name["dice_resolve"]["input_schema"]["required"]
         # asset_request requires kind
         assert "kind" in schemas_by_name["asset_request"]["input_schema"]["required"]
+        # atmospherics has no required args (all preset/override fields optional)
+        assert "atmospherics" in schemas_by_name
+        atmo_schema = schemas_by_name["atmospherics"]["input_schema"]
+        assert "time_of_day" in atmo_schema["properties"]
+        assert "weather" in atmo_schema["properties"]
 
 
 def test_loop_dispatches_tool_then_parses_final_json(fake_anthropic_module, monkeypatch):

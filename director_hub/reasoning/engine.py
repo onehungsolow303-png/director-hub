@@ -105,6 +105,14 @@ class ReasoningEngine:
             "fx_requests": inner.get("fx_requests") or [],
             "repetition_penalty": int(inner.get("repetition_penalty", 0)),
             "deterministic_fallback": used_fallback,
+            # Optional pass-throughs the provider may attach. Both are
+            # null/None when not produced this turn. encounter_template was
+            # being silently dropped here pre-2026-04-26 — never noticed
+            # because the engine doesn't currently consume it. atmospherics
+            # is the new hot path: provider auto-captures the tool's return
+            # dict and the server's MaybeBroadcastAtmospherics reads from here.
+            "encounter_template": inner.get("encounter_template"),
+            "atmospherics": inner.get("atmospherics"),
         }
 
 

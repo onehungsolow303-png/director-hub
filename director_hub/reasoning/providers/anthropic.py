@@ -1,9 +1,10 @@
 """Anthropic Claude provider with full tool-use loop.
 
 Uses the official `anthropic` SDK + Claude's tool_use API. The provider
-registers all four toolbelt entries (asset_request, dice_resolve,
-narrative_write, game_state_read) at construction time and runs an
-observe→reason→tool→reason→...→emit loop on each `interpret()` call.
+registers all five toolbelt entries (asset_request, dice_resolve,
+narrative_write, game_state_read, atmospherics) at construction time
+and runs an observe→reason→tool→reason→...→emit loop on each
+`interpret()` call.
 
 The loop is bounded by `max_tool_iterations` (default 8) so a model
 that gets stuck in a tool spiral fails fast instead of burning tokens.
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from director_hub.toolbelt.asset_tool import AssetTool
+from director_hub.toolbelt.atmospherics_tool import AtmosphericsTool
 from director_hub.toolbelt.dice_tool import DiceTool
 from director_hub.toolbelt.game_state_tool import (
     GameStateTool,
@@ -99,8 +101,8 @@ class ProviderUnavailable(Exception):
 
 _SYSTEM_PROMPT = """You are the AI Game Master for an RPG. You receive the
 player's free-text action plus their stats and the scene context. You also
-have access to four tools that let you gather information before deciding
-what happens.
+have access to five tools that let you gather information or shape the
+environment before deciding what happens.
 
 Available tools:
   - game_state_read: Read live engine state (player HP/position, pending
@@ -115,6 +117,10 @@ Available tools:
                      don't already have.
   - narrative_write: Append a structured journal entry. Optional;
                      useful for tracking conversation continuity.
+  - atmospherics:    Set the visible sky/sun/wind to match the narrative
+                     (sunset, storm, dawn). Just call the tool — the
+                     engine receives the result automatically. See
+                     ATMOSPHERICS section below for triggers and rules.
 
 Workflow:
   1. If you need information not in the user payload, call tools to
@@ -129,6 +135,10 @@ Workflow:
        - If your narrative introduces a new visual element (a creature
          the player hasn't seen, a tile / texture the scene needs),
          CALL asset_request so the engine can pre-load it.
+       - If your narrative implies a change to the visible environment
+         (sun setting, dawn breaking, storm rolling in, weather shift,
+         dramatic atmospheric beat), CALL atmospherics. See ATMOSPHERICS
+         section below for full triggers and rules.
   2. When you have what you need, emit your final response as a JSON
      object with these exact fields:
 
@@ -140,6 +150,9 @@ Workflow:
        "fx_requests":        [{kind, biome?, theme?}],
        "repetition_penalty": int (higher when player repeats themselves)
      }
+     The atmospherics field is filled in automatically by the engine
+     when you call the atmospherics tool — you don't need to emit it
+     in your JSON.
 
      `stat` must be one of "hp", "attack", "defense", "status".
 
@@ -230,6 +243,50 @@ PHYSICAL EFFECTS — when to emit stat_effects:
     - DO NOT emit damage just because the conversation is tense. Damage
       requires the NPC actually attacking in your narrative.
 
+ATMOSPHERICS — when to set the visible environment:
+  Call the `atmospherics` tool when your narrative implies the visible
+  environment should change. The engine applies the result via
+  GaiaRuntimeBridge → Gaia runtime API: sun rotation/intensity/color,
+  wind speed/direction, skybox tint and exposure.
+
+  Triggers (call when ANY of these match the narrative):
+    1. Time-of-day shift in the narrative ("as the sun sets...",
+       "morning light breaks", "midnight falls", "dawn approaches")
+    2. Weather change ("a storm rolls in", "rain begins", "the wind
+       picks up", "blizzard descends", "clouds part")
+    3. Dramatic atmospheric beat where environment reinforces story
+       (boss reveal, ritual climax, planar shift)
+
+  How to call:
+    atmospherics(time_of_day="dusk", weather="stormy")
+    Optional args:
+      - time_of_day: dawn / morning / noon / afternoon / dusk / night
+      - weather: calm / breezy / stormy / blizzard
+      - wind_direction_norm: 0.0=N, 0.25=E, 0.5=S, 0.75=W
+      - transition_seconds: 0-60 (default 2)
+
+  After calling, your `narrative_text` should reinforce the same beat
+  (the player should SEE the sky change AND read prose that matches).
+  The engine receives the tool's return dict automatically — you don't
+  need to transcribe it into your final JSON.
+
+  Concrete example — player rests at sundown after a long day:
+    1. Call: atmospherics(time_of_day="dusk", weather="calm", transition_seconds=5)
+    2. Your final JSON: just the usual fields (success, scale, narrative_text,
+       stat_effects, etc.). The atmospherics field is auto-filled.
+    3. Your narrative_text should describe the dusk + calm wind so the
+       player's prose and the visible environment match.
+
+  When NOT to call:
+    - Don't call every turn. Atmospherics is for narrative beats, not
+      a clock. Skip when nothing about the visible environment has
+      changed since the last response.
+    - Don't call when the scene is indoors (cave, dungeon, tavern
+      interior, basement) — the player can't see the sky.
+    - Don't call during combat just because combat is dramatic — only
+      if the encounter explicitly involves an environmental shift
+      (the boss summons a storm, the floor opens to the void).
+
 CRITICAL OUTPUT FORMAT:
   - Your final message must contain a JSON object matching the schema above.
   - Do NOT add prose explanations before or after the JSON ("Here's the
@@ -312,14 +369,17 @@ class AnthropicProvider(ReasoningProvider):
         self._max_tokens = max_tokens
         self._max_tool_iterations = max_tool_iterations
 
-        # Register all four tools so the LLM can call them via tool_use.
+        # Register all five tools so the LLM can call them via tool_use.
         # AssetTool and GameStateTool make HTTP calls under the hood; both
         # fall back gracefully when their target services are unreachable.
+        # AtmosphericsTool returns a dict the LLM copies into the response's
+        # `atmospherics` field; the engine applies it via GaiaRuntimeBridge.
         self._registry = ToolRegistry()
         self._registry.register(DiceTool())
         self._registry.register(NarrativeTool())
         self._registry.register(AssetTool())
         self._registry.register(GameStateTool())
+        self._registry.register(AtmosphericsTool())
         self._tool_schemas = _build_tool_schemas()
 
         self._memory_manager = kwargs.get("memory_manager")
@@ -435,6 +495,13 @@ class AnthropicProvider(ReasoningProvider):
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": user_payload}]
 
+        # Sidecar accumulator for atmospherics tool calls. The dispatcher
+        # captures the tool's return dict; we merge it into the final result
+        # below. This decouples "LLM decides to call atmospherics" from
+        # "LLM transcribes the result into final JSON" — Haiku is unreliable
+        # at the second step, so we automate it here.
+        captured_atmospherics: dict[str, Any] | None = None
+
         for _iteration in range(self._max_tool_iterations):
             try:
                 response = self._client.messages.create(
@@ -455,10 +522,17 @@ class AnthropicProvider(ReasoningProvider):
                 result = self._parse_final(response, action_request)
                 if encounter_template_data:
                     result["encounter_template"] = encounter_template_data
+                # Merge captured atmospherics if the LLM called the tool but
+                # didn't transcribe the result into its final JSON. Explicit
+                # LLM-emitted atmospherics (truthy dict) wins over the capture.
+                if captured_atmospherics is not None and not result.get("atmospherics"):
+                    result["atmospherics"] = captured_atmospherics
                 return result
 
             if response.stop_reason == "tool_use":
-                tool_results = self._dispatch_tools(response, session_id)
+                tool_results, atmo_from_tools = self._dispatch_tools(response, session_id)
+                if atmo_from_tools is not None:
+                    captured_atmospherics = atmo_from_tools
                 messages.append({"role": "user", "content": tool_results})
                 continue
 
@@ -484,10 +558,22 @@ class AnthropicProvider(ReasoningProvider):
             self._client = self._anthropic.Anthropic(api_key=latest)
             self._current_key = latest
 
-    def _dispatch_tools(self, response: Any, session_id: str) -> list[dict[str, Any]]:
-        """Execute every tool_use block in the response and return a list of
-        tool_result blocks ready to append as the next user message."""
+    def _dispatch_tools(
+        self, response: Any, session_id: str
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+        """Execute every tool_use block in the response.
+
+        Returns (tool_results, captured_atmospherics):
+          - tool_results: list of tool_result blocks ready to append as the
+            next user message
+          - captured_atmospherics: the atmospherics tool's return dict if it
+            was called this turn, else None. The caller merges this into the
+            final response's `atmospherics` field. Haiku is unreliable at
+            verbatim copying multi-key dicts from tool_result blocks into
+            its final JSON, so the dispatcher captures it directly.
+        """
         results: list[dict[str, Any]] = []
+        captured_atmospherics: dict[str, Any] | None = None
         for block in response.content:
             if getattr(block, "type", None) != "tool_use":
                 continue
@@ -514,6 +600,14 @@ class AnthropicProvider(ReasoningProvider):
 
             try:
                 tool_output = tool.call(**tool_input)
+
+                # Capture the atmospherics return dict so the caller can merge
+                # it into decision.atmospherics. Last call in a turn wins (LLM
+                # rarely calls twice but if it does, the latest beat is what
+                # the player should see). Defensive against non-dict returns.
+                if tool_name == "atmospherics" and isinstance(tool_output, dict):
+                    captured_atmospherics = tool_output
+
                 # Use warning level so the dispatch line shows in default
                 # Python logging config (which suppresses INFO).
                 logger.warning(
@@ -540,7 +634,7 @@ class AnthropicProvider(ReasoningProvider):
                     }
                 )
 
-        return results
+        return results, captured_atmospherics
 
     def _parse_final(self, response: Any, action_request: dict[str, Any]) -> dict[str, Any]:
         """Extract the final assistant text, parse as JSON, apply defensive
@@ -849,6 +943,59 @@ def _build_tool_schemas() -> list[dict[str, Any]]:
                         "description": (
                             "Optional. The Director Hub injects the current session_id "
                             "automatically if you omit it."
+                        ),
+                    },
+                },
+            },
+        },
+        {
+            "name": "atmospherics",
+            "description": (
+                "Set the visible environment (sun position/intensity/color, wind, "
+                "skybox) to match the current narrative beat. Call when your "
+                "narrative implies a time-of-day or weather change. The return "
+                "dict MUST be copied verbatim into the 'atmospherics' field of "
+                "your final response — the engine reads it from there and "
+                "applies via GaiaRuntimeBridge → Gaia runtime API. Skip when "
+                "the scene is indoors (cave, tavern, dungeon) or when nothing "
+                "atmospheric has changed since last turn."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "time_of_day": {
+                        "type": "string",
+                        "enum": ["dawn", "morning", "noon", "afternoon", "dusk", "night"],
+                        "description": (
+                            "Time-of-day preset. Sets sun pitch/rotation/intensity/kelvin "
+                            "and a matching skybox tint."
+                        ),
+                    },
+                    "weather": {
+                        "type": "string",
+                        "enum": ["calm", "breezy", "stormy", "blizzard"],
+                        "description": (
+                            "Weather preset. Sets wind speed; stormy/blizzard also "
+                            "darken the skybox on top of any time_of_day preset."
+                        ),
+                    },
+                    "wind_direction_norm": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "description": (
+                            "Wind direction normalized 0-1 (0=N, 0.25=E, 0.5=S, 0.75=W). "
+                            "NOT degrees — Gaia's GaiaAPI convention multiplies by 360."
+                        ),
+                    },
+                    "transition_seconds": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 60.0,
+                        "description": (
+                            "Lerp duration on the client. 0 = instant, default 2s. "
+                            "Use longer (5-10s) for cinematic shifts (sunset), "
+                            "shorter (0-1s) for sudden beats (lightning flash)."
                         ),
                     },
                 },
